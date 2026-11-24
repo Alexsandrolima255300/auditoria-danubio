@@ -16,7 +16,10 @@ export default function Home() {
   const valorCobrado = Number(cobrado.replace(',', '.')) || 0;
   const pesoCalc = kg * 0.7;
   const notaCalc = nf * 0.015;
-  const esperado = Math.max(100, pesoCalc, notaCalc);\n  const criterio = esperado === 100 ? 'Frete mínimo de R$ 100,00' : pesoCalc >= notaCalc ? 'R$ 0,70 por kg' : '1,5% sobre o valor da nota';\n  const diferenca = Math.abs(valorCobrado - esperado);\n  const situacaoValor = valorCobrado > esperado ? 'acima do correto' : 'abaixo do correto';
+  const esperado = Math.max(100, pesoCalc, notaCalc);
+  const criterio = esperado === 100 ? 'Frete mínimo de R$ 100,00' : pesoCalc >= notaCalc ? 'R$ 0,70 por kg' : '1,5% sobre o valor da nota';
+  const diferenca = Math.abs(valorCobrado - esperado);
+  const situacaoValor = valorCobrado > esperado ? 'acima do correto' : 'abaixo do correto';
   const tomadorValido = onlyDigits(cnpj) === '39860057000104';
   const divergente = Math.abs(valorCobrado - esperado) >= 0.01;
 
