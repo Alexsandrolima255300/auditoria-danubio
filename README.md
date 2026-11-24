@@ -14,3 +14,6 @@ Gerar divergência somente quando o tomador do serviço for BRASIL ENGRENAGENS E
 Monitorar mensagens do Siimp Sistemas e pesquisar também a palavra Danubio.
 
 A integração com Outlook, leitura de anexos e persistência ainda precisam ser implementadas.
+
+## Importante: ICMS
+O ICMS não entra no cálculo nem na comparação da auditoria. Comparar o valor esperado (maior entre R$ 100,00, peso x R$ 0,70 e NF x 1,5%) exclusivamente com o valor do frete cobrado sem ICMS. Não usar o total da prestação quando ele incluir ICMS.
