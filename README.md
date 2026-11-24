@@ -1,19 +1,20 @@
 # ALEX FREIGHT AUDIT
 
-Sistema de auditoria de fretes da transportadora Danubio.
+Auditoria de fretes da transportadora Danubio.
 
-## Regra inicial
-- Frete por peso: peso em kg x R$ 0,70.
-- Frete por nota: valor da NF x 1,5%.
-- Valor esperado: o maior entre os dois cálculos, respeitando o mínimo de R$ 100,00.
+## Calculo
+- Peso x R$ 0,70.
+- Valor da NF x 1,5%.
+- Referencia: maior entre R$ 100,00 e os dois calculos.
 
-## Regra de elegibilidade
-Gerar divergência somente quando o tomador do serviço for BRASIL ENGRENAGENS E CORRENTES IMPORTADORA LTDA, CNPJ 39.860.057/0001-04.
+## Aceitacao
+Auditar somente CT-e cujo tomador seja BRASIL ENGRENAGENS E CORRENTES IMPORTADORA LTDA, CNPJ 39.860.057/0001-04.
+Para esse tomador, frete cobrado de ate R$ 100,00 (inclusive) e aceito sem divergencia.
+Acima de R$ 100,00, comparar com a referencia; diferencas para mais ou para menos geram alerta.
+Outros tomadores ficam fora do escopo.
 
-## E-mails
-Monitorar mensagens do Siimp Sistemas e pesquisar também a palavra Danubio.
+## ICMS
+Desconsiderar totalmente o ICMS. Usar somente o valor do frete cobrado, sem ICMS. Nao calcular nem apontar divergencias relacionadas ao imposto.
 
-A integração com Outlook, leitura de anexos e persistência ainda precisam ser implementadas.
-
-## Importante: ICMS
-O ICMS não entra no cálculo nem na comparação da auditoria. Comparar o valor esperado (maior entre R$ 100,00, peso x R$ 0,70 e NF x 1,5%) exclusivamente com o valor do frete cobrado sem ICMS. Não usar o total da prestação quando ele incluir ICMS.
+## Integracoes
+Monitoramento Outlook, leitura de anexos e persistencia ainda precisam ser implementados.
