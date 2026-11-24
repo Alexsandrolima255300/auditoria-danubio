@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const onlyDigits = (s: string) => s.replace(/\\D/g, '');
+const onlyDigits = (s: string) => s.replace(/\D/g, '');
 
 export default function Home() {
   const [peso, setPeso] = useState('2,88');
