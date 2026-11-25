@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
-import { microsoftConfig } from "@/lib/microsoft";
+import { microsoftConfig } from "../../../../lib/microsoft";
 
 export async function GET(request: NextRequest) {
   try {
