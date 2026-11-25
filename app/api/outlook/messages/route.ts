@@ -24,9 +24,21 @@ export async function GET(request: NextRequest) {
     const connections = await db("outlook_connections?select=id,mailbox_email&revoked_at=is.null&order=last_refreshed_at.desc&limit=1");
     if (!connections?.length) return NextResponse.json({ connected: false, error: "Outlook ainda não conectado." }, { status: 401 });
     const connection = connections[0];
-    const rows = await db("email_messages?select=graph_message_id,subject,sender_name,sender_email,received_at,has_attachments&connection_id=eq." +
-      encodeURIComponent(connection.id) + "&order=received_at.desc&limit=50");
-    const emails = (rows || []).map((mail: any) => ({
+    const brazilDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date());
+    // O Brasil está em UTC-3 (sem horário de verão); o intervalo é calculado no fuso de Brasília.
+    const dayStart = new Date(brazilDate + "T00:00:00-03:00");
+    const nextDayStart = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+    const select = "select=graph_message_id,subject,sender_name,sender_email,received_at,has_attachments";
+    const [rows, todayRows] = await Promise.all([
+      db("email_messages?" + select + "&connection_id=eq." + encodeURIComponent(connection.id) + "&order=received_at.desc&limit=50"),
+      db("email_messages?" + select + "&connection_id=eq." + encodeURIComponent(connection.id) +
+        "&received_at=gte." + encodeURIComponent(dayStart.toISOString()) +
+        "&received_at=lt." + encodeURIComponent(nextDayStart.toISOString()) +
+        "&order=received_at.desc&limit=200"),
+    ]);
+    const mapMail = (mail: any) => ({
       id: mail.graph_message_id,
       subject: mail.subject || "(sem assunto)",
       sender: mail.sender_name || mail.sender_email || "Remetente desconhecido",
@@ -35,8 +47,13 @@ export async function GET(request: NextRequest) {
       hasAttachments: Boolean(mail.has_attachments),
       preview: "Mensagem registrada na última sincronização.",
       webLink: "",
-    }));
-    return NextResponse.json({ connected: true, mailbox: connection.mailbox_email, count: emails.length, emails });
+    });
+    const emails = (rows || []).map(mapMail);
+    const todayEmails = (todayRows || []).map(mapMail);
+    return NextResponse.json({
+      connected: true, mailbox: connection.mailbox_email, count: emails.length, emails,
+      brazilDate, todayCount: todayEmails.length, todayEmails,
+    });
   } catch (error) {
     return NextResponse.json({ connected: false, error: error instanceof Error ? error.message : "Falha ao consultar mensagens salvas." }, { status: 400 });
   }
