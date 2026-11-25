@@ -47,6 +47,22 @@ async function searchAll(accessToken: string, term: string, maxMessages: number,
   }
   return { items: items.slice(0, maxMessages), hasMore: Boolean(next), nextLink: next };
 }
+async function listIncremental(accessToken: string, startingUrl: string | null, since: string) {
+  const first = new URL("https://graph.microsoft.com/v1.0/me/messages");
+  first.searchParams.set("$filter", "receivedDateTime ge " + since);
+  first.searchParams.set("$orderby", "receivedDateTime asc");
+  first.searchParams.set("$top", "2");
+  first.searchParams.set("$select", "id,subject,from,receivedDateTime,hasAttachments,internetMessageId,conversationId,bodyPreview");
+  const url = startingUrl || first.toString();
+  const response = await fetch(url, { headers: { Authorization: "Bearer " + accessToken }, cache: "no-store" });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error?.message || "Falha na sincronização incremental do Outlook.");
+  const candidates = (data.value || []).filter((m: any) =>
+    /danubio|danúbio/i.test((m.subject || "") + " " + (m.bodyPreview || "")) ||
+    /siimp/i.test((m.from?.emailAddress?.name || "") + " " + (m.from?.emailAddress?.address || "") + " " + (m.subject || "") + " " + (m.bodyPreview || ""))
+  );
+  return { items: candidates, nextLink: data["@odata.nextLink"] || null };
+}
 function isPdf(a: any) {
   return (a.contentType || "").toLowerCase().includes("pdf") || (a.name || "").toLowerCase().endsWith(".pdf");
 }
@@ -89,7 +105,7 @@ export async function POST(request: NextRequest) {
     const mailbox = profile.mail || profile.userPrincipalName;
     if (!mailbox) throw new Error("Não foi possível identificar a caixa de e-mail conectada.");
 
-    const existing = await db("outlook_connections?select=id&mailbox_email=eq." + encodeURIComponent(mailbox) + "&revoked_at=is.null&limit=1");
+    const existing = await db("outlook_connections?select=id,audit_checkpoint&mailbox_email=eq." + encodeURIComponent(mailbox) + "&revoked_at=is.null&limit=1");
     let connectionId: string;
     const connectionPayload = {
       provider: "microsoft_graph", mailbox_email: mailbox, tenant_id: process.env.MICROSOFT_TENANT_ID,
@@ -106,20 +122,38 @@ export async function POST(request: NextRequest) {
       connectionId = created[0].id;
     }
 
-    // Cada termo possui paginação independente. Quando uma busca termina,
-    // done=true impede que ela reinicie na primeira página nos próximos lotes.
-    const [danubio, siimp] = await Promise.all([
-      payload.doneDanubio === true
-        ? Promise.resolve({ items: [] as any[], hasMore: false, nextLink: null })
-        : searchAll(tokens.access_token, "Danubio", 2, payload.cursorDanubio),
-      payload.doneSiimp === true
-        ? Promise.resolve({ items: [] as any[], hasMore: false, nextLink: null })
-        : searchAll(tokens.access_token, "Siimp Sistemas", 2, payload.cursorSiimp),
-    ]);
-    const unique = new Map<string, any>();
-    for (const m of [...danubio.items, ...siimp.items]) unique.set(m.id, m);
-    const messages = [...unique.values()].sort((a,b) => new Date(a.receivedDateTime).getTime() - new Date(b.receivedDateTime).getTime());
+    // O checkpoint fica no Supabase, não no navegador. Assim, uma página recarregada
+    // ou execução interrompida continua do último nextLink confirmado.
+    const checkpoint = existing?.[0]?.audit_checkpoint || {};
+    let messages: any[] = [];
+    let hasMore = false;
+    let nextLink: string | null = null;
+    let syncStartedAt: string | null = null;
+    let legacyDanubio: any = { hasMore: false, nextLink: null };
+    let legacySiimp: any = { hasMore: false, nextLink: null };
 
+    if (payload.reprocessProcessed === true) {
+      const [danubio, siimp] = await Promise.all([
+        payload.doneDanubio === true ? Promise.resolve({ items: [], hasMore: false, nextLink: null }) : searchAll(tokens.access_token, "Danubio", 2, payload.cursorDanubio),
+        payload.doneSiimp === true ? Promise.resolve({ items: [], hasMore: false, nextLink: null }) : searchAll(tokens.access_token, "Siimp Sistemas", 2, payload.cursorSiimp),
+      ]);
+      const unique = new Map<string, any>();
+      for (const m of [...danubio.items, ...siimp.items]) unique.set(m.id, m);
+      messages = [...unique.values()].sort((a,b) => new Date(a.receivedDateTime).getTime() - new Date(b.receivedDateTime).getTime());
+      legacyDanubio = danubio; legacySiimp = siimp;
+      hasMore = danubio.hasMore || siimp.hasMore;
+      nextLink = null;
+    } else {
+      syncStartedAt = checkpoint.syncStartedAt || new Date().toISOString();
+      const since = checkpoint.lastSyncAt
+        ? new Date(new Date(checkpoint.lastSyncAt).getTime() - 5 * 60 * 1000).toISOString()
+        : new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const batch = await listIncremental(tokens.access_token, checkpoint.nextLink || null, since);
+      messages = batch.items;
+      nextLink = batch.nextLink;
+      hasMore = Boolean(nextLink);
+    }
+    messages = messages.filter((m: any) => !m["@removed"]);
     let emailsSaved = 0, attachmentsSaved = 0, pdfsRead = 0, auditsCreated = 0, ignored = 0, alreadyProcessedSkipped = 0, errors = 0;
     const results: any[] = [];
     for (const mail of messages) {
@@ -208,14 +242,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (payload.reprocessProcessed !== true) {
+      const nextCheckpoint = hasMore
+        ? { mode: "incremental", lastSyncAt: checkpoint.lastSyncAt || null, syncStartedAt, nextLink }
+        : { mode: "incremental", lastSyncAt: syncStartedAt, syncStartedAt: null, nextLink: null };
+      await db("outlook_connections?id=eq." + connectionId, {
+        method: "PATCH", headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ audit_checkpoint: nextCheckpoint }),
+      });
+    }
     const response = NextResponse.json({
       ok: true, mailbox, searched: ["Danubio", "Siimp Sistemas"], emailsFound: messages.length,
       emailsSaved, attachmentsSaved, pdfsRead, auditsCreated, ignored, errors,
       alreadyProcessedSkipped,
-      hasMore: danubio.hasMore || siimp.hasMore,
-      nextDanubio: danubio.nextLink, nextSiimp: siimp.nextLink,
-      doneDanubio: !danubio.hasMore, doneSiimp: !siimp.hasMore, results,
-      note: "Mensagens e anexos PDF encontrados foram processados. Campos não identificados ficam em revisão; nenhuma contestação é enviada.",
+      hasMore,
+      nextDanubio: legacyDanubio.nextLink, nextSiimp: legacySiimp.nextLink,
+      doneDanubio: !legacyDanubio.hasMore, doneSiimp: !legacySiimp.hasMore, results,
+      syncMode: payload.reprocessProcessed === true ? "manual-reprocess" : "incremental",
+      note: "A sincronização incremental consulta apenas mensagens recebidas desde o último checkpoint. Mensagens e anexos são processados em modo somente leitura.",
     });
     if (tokens.refresh_token) response.cookies.set("outlook_refresh", sealToken(tokens.refresh_token), {
       httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 60 * 60 * 24 * 30, path: "/",
