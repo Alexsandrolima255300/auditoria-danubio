@@ -4,7 +4,7 @@ import { evaluateFreight, extractCte } from "../../../../lib/cte-audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const PROJECT_URL = process.env.SUPABASE_URL || "https://shzyfxkjsssjpmesvhxu.supabase.co";
 
@@ -54,12 +54,36 @@ function isCteCandidate(a: any) {
   return isPdf(a) && /cte|ct-e|conhecimento|frete|danubio|danúbio/i.test(a.name || "");
 }
 
+export async function GET(request: NextRequest) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || request.headers.get("authorization") !== "Bearer " + secret) {
+    return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
+  }
+  const internalRequest = new NextRequest(request.url, {
+    method: "POST",
+    headers: request.headers,
+    body: "{}",
+  });
+  return POST(internalRequest);
+}
+
 export async function POST(request: NextRequest) {
   const payload = await request.json().catch(() => ({} as any));
   const encryptedRefresh = request.cookies.get("outlook_refresh")?.value;
-  if (!encryptedRefresh) return NextResponse.json({ error: "Outlook ainda não conectado." }, { status: 401 });
+  const cronSecret = process.env.CRON_SECRET;
+  const cronAuthorized = Boolean(cronSecret && request.headers.get("authorization") === "Bearer " + cronSecret);
+  if (!encryptedRefresh && !cronAuthorized) return NextResponse.json({ error: "Outlook ainda não conectado." }, { status: 401 });
   try {
-    const refreshToken = openToken(encryptedRefresh);
+    let refreshToken: string;
+    if (encryptedRefresh) {
+      refreshToken = openToken(encryptedRefresh);
+    } else {
+      const connections = await db("outlook_connections?select=encrypted_token_cache&revoked_at=is.null&order=last_refreshed_at.desc&limit=1");
+      if (!connections?.length || !connections[0].encrypted_token_cache) {
+        throw new Error("Outlook ainda não conectado. Faça uma primeira auditoria manual para registrar a conexão.");
+      }
+      refreshToken = openToken(connections[0].encrypted_token_cache);
+    }
     const tokens = await refreshMicrosoftToken(refreshToken);
     const profile = await graph(tokens.access_token, "/me?$select=displayName,mail,userPrincipalName");
     const mailbox = profile.mail || profile.userPrincipalName;
