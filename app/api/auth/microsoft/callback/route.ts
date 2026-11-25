@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { microsoftConfig, sealToken } from "@/lib/microsoft";
+import { microsoftConfig, sealToken } from "../../../../../lib/microsoft";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
