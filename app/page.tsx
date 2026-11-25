@@ -21,7 +21,7 @@ export default function Home() {
   const [mailCount, setMailCount] = useState<number | null>(null);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditResult, setAuditResult] = useState<any>(null);
-  const [auditCursor, setAuditCursor] = useState<any>({ cursorDanubio: null, cursorSiimp: null });
+  const [auditCursor, setAuditCursor] = useState<any>({ cursorDanubio: null, cursorSiimp: null, doneDanubio: false, doneSiimp: false });
   const [auditProgress, setAuditProgress] = useState({ processed: 0, percent: 0, running: false });
   const [responsibleName, setResponsibleName] = useState('');
   const [dailyConfirmation, setDailyConfirmation] = useState<any>(null);
@@ -95,7 +95,12 @@ export default function Home() {
         totals.errors += data.errors || 0;
         totals.ignored += data.ignored || 0;
         allResults = [...allResults, ...(data.results || [])];
-        cursor = { cursorDanubio: data.nextDanubio || null, cursorSiimp: data.nextSiimp || null };
+        cursor = {
+          cursorDanubio: data.nextDanubio || null,
+          cursorSiimp: data.nextSiimp || null,
+          doneDanubio: data.doneDanubio === true,
+          doneSiimp: data.doneSiimp === true,
+        };
         setAuditCursor(cursor);
         const percent = data.hasMore ? Math.min(95, Math.max(5, Math.round((totals.emailsFound / Math.max(mailCount || 1, totals.emailsFound + 1)) * 100))) : 100;
         setAuditProgress({ processed: totals.emailsFound, percent, running: Boolean(data.hasMore) });
