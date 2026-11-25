@@ -18,7 +18,7 @@ export default function Home() {
   const [mailLoading, setMailLoading] = useState(false);
   const [mailError, setMailError] = useState('');
   const [connected, setConnected] = useState(false);
-  const [mailCount, setMailCount] = useState<number | null>(null);\n  const [auditLoading, setAuditLoading] = useState(false);\n  const [auditResult, setAuditResult] = useState<any>(null);
+  const [mailCount, setMailCount] = useState<number | null>(null);\n  const [auditLoading, setAuditLoading] = useState(false);\n  const [auditResult, setAuditResult] = useState<any>(null);\n  const [auditCursor, setAuditCursor] = useState<any>({ cursorDanubio: null, cursorSiimp: null });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -55,10 +55,10 @@ export default function Home() {
   async function runAudit() {
     setAuditLoading(true); setMailError(''); setAuditResult(null);
     try {
-      const response = await fetch('/api/outlook/audit', { method: 'POST', cache: 'no-store' });
+      const response = await fetch('/api/outlook/audit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(auditCursor), cache: 'no-store' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Falha ao auditar e-mails.');
-      setAuditResult(data); setConnected(true);
+      setAuditResult(data); setAuditCursor({ cursorDanubio: data.nextDanubio || null, cursorSiimp: data.nextSiimp || null }); setConnected(true);
     } catch (error) {
       setMailError(error instanceof Error ? error.message : 'Erro na auditoria.');
     } finally { setAuditLoading(false); }
@@ -86,7 +86,7 @@ export default function Home() {
       <section className="mail-panel mail-live"><div className="mail-icon">✉</div><div className="mail-main"><h3>Conexão com Microsoft Outlook</h3><p>Conecte a caixa corporativa para localizar mensagens do Siimp Sistemas e e-mails que mencionem “Danubio”. A consulta é somente leitura.</p><span className="pill">Siimp Sistemas</span> <span className="pill">Palavra-chave: Danubio</span> <span className="pill">Somente leitura</span>
         {mailError && <div className="mail-error">{mailError}</div>}
         {connected && <div className="mail-success">Conta conectada. {mailCount === null ? '' : `${mailCount} mensagem(ns) localizada(s).`}</div>}
-        <div className="mail-actions">{!connected && <button onClick={()=>window.location.href='/api/outlook/connect'}>Conectar Microsoft Outlook</button>}<button className="light" onClick={()=>void syncEmails()} disabled={mailLoading}>{mailLoading ? 'Consultando mensagens...' : connected ? 'Atualizar e-mails' : 'Testar conexão'}</button><button onClick={()=>void runAudit()} disabled={!connected || auditLoading}>{auditLoading ? 'Auditando e-mails...' : 'Auditar e-mails e CT-e'}</button></div>{auditResult && <div className="mail-success">Varredura: {auditResult.emailsFound} e-mails, {auditResult.pdfsRead} PDFs lidos, {auditResult.auditsCreated} auditorias salvas, {auditResult.errors} erros. {auditResult.hasMore ? 'Há mais mensagens; clique novamente para continuar.' : 'Busca concluída.'}</div>}{auditResult?.results?.length > 0 && <div className="mail-list"><h4>CT-e processados</h4>{auditResult.results.map((item:any,i:number)=><article className="mail-item" key={i}><div><b>{item.file || item.email}</b><small>{item.reason}</small></div><div className="mail-meta"><span className="pill">{item.status}</span>{item.freight !== undefined && <small>Frete: {brl(item.freight)}</small>}</div></article>)}</div>}
+        <div className="mail-actions">{!connected && <button onClick={()=>window.location.href='/api/outlook/connect'}>Conectar Microsoft Outlook</button>}<button className="light" onClick={()=>void syncEmails()} disabled={mailLoading}>{mailLoading ? 'Consultando mensagens...' : connected ? 'Atualizar e-mails' : 'Testar conexão'}</button><button onClick={()=>void runAudit()} disabled={!connected || auditLoading}>{auditLoading ? 'Auditando e-mails...' : auditResult?.hasMore ? 'Continuar varredura' : 'Auditar e-mails e CT-e'}</button></div>{auditResult && <div className="mail-success">Varredura: {auditResult.emailsFound} e-mails, {auditResult.pdfsRead} PDFs lidos, {auditResult.auditsCreated} auditorias salvas, {auditResult.errors} erros. {auditResult.hasMore ? 'Há mais mensagens; clique novamente para continuar.' : 'Busca concluída.'}</div>}{auditResult?.results?.length > 0 && <div className="mail-list"><h4>CT-e processados</h4>{auditResult.results.map((item:any,i:number)=><article className="mail-item" key={i}><div><b>{item.file || item.email}</b><small>{item.reason}</small></div><div className="mail-meta"><span className="pill">{item.status}</span>{item.freight !== undefined && <small>Frete: {brl(item.freight)}</small>}</div></article>)}</div>}
         {emails.length > 0 && <div className="mail-list"><h4>Mensagens encontradas</h4>{emails.map(mail=><article key={mail.id} className="mail-item"><div><b>{mail.subject}</b><small>{mail.sender} · {new Date(mail.receivedAt).toLocaleString('pt-BR')}</small><p>{mail.preview}</p></div><div className="mail-meta">{mail.hasAttachments && <span className="pill">Com anexo</span>}{mail.webLink && <a href={mail.webLink} target="_blank" rel="noreferrer">Abrir e-mail</a>}</div></article>)}</div>}
       </div><span className={connected ? 'not-connected connected' : 'not-connected'}>{connected ? 'Conectado' : 'Aguardando conexão'}</span></section>
       <footer>ALEX FREIGHT AUDIT · Relatórios de divergência sujeitos à revisão humana.</footer>
