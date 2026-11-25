@@ -102,3 +102,21 @@
 .header-actions{display:flex;align-items:center;gap:10px}.logout-button{width:auto;margin:0;padding:10px 15px;background:#fff;color:#53627b;border:1px solid #dce3ed;font-size:11px}
 .logout-button:hover{background:#f6f8fc}
 @media(max-width:800px){.login-shell{grid-template-columns:1fr}.login-visual{display:none}.login-panel-wrap{min-height:100vh;padding:35px 22px}.login-mobile-brand{display:flex}.login-panel{max-width:420px}.header-actions{margin-top:12px;justify-content:space-between}}
+
+
+/* Pastas de e-mails agrupadas por dia */
+.email-folders-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.email-folders-heading h4{margin:0 0 5px}
+.email-folders-heading p{margin:0;color:#8290a4;font-size:10px}
+.email-folder-count{font-size:10px;color:#536b9a;background:#eef2fa;padding:6px 9px;border-radius:20px;white-space:nowrap}
+.email-day-folder{border:1px solid #e7ebf2;border-radius:9px;overflow:hidden;margin:9px 0;background:#fff}
+.email-folder-toggle{display:flex;align-items:center;gap:11px;width:100%;margin:0;padding:13px 14px;text-align:left;background:#f8faff;color:#26354c;border:0;border-radius:0}
+.email-folder-toggle:hover{background:#f0f4fc}
+.email-folder-icon{font-size:17px;color:#315efb;width:15px}
+.email-folder-title{display:flex;flex-direction:column;gap:4px;min-width:0}
+.email-folder-title b{font-size:11px;text-transform:capitalize}
+.email-folder-title small{font-size:10px;color:#8290a4}
+.email-folder-state{margin-left:auto;font-size:10px;color:#315efb;white-space:nowrap}
+.email-folder-content{padding:0 13px}
+.email-folder-content .mail-item:last-child{border-bottom:0}
+@media(max-width:600px){.email-folders-heading{align-items:flex-start}.email-folder-toggle{padding:12px 10px}.email-folder-state{font-size:9px}}
