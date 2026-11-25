@@ -14,7 +14,7 @@ const textField = (text: string, pattern: RegExp) => {
 };
 const statusLabel = (status?: string) => (({ accepted: 'Aceito', divergent: 'Divergência', needs_review: 'Revisão necessária', out_of_scope: 'Fora do escopo', pending: 'Pendente', extracted: 'Extraído', error: 'Erro na leitura', discovered: 'Localizado', attachments_checked: 'Anexos conferidos' } as Record<string, string>)[status || ''] || status || 'Não informado');
 
-type Section = 'overview' | 'documents' | 'divergences' | 'newEmails' | 'emails' | 'search';
+type Section = 'overview' | 'documents' | 'divergences' | 'newEmails' | 'emails' | 'search' | 'invoices';
 type Mail = { id: string; subject: string; sender: string; senderEmail: string; receivedAt: string; hasAttachments: boolean; preview: string; webLink: string };
 type AuditData = { mailbox?: string; emails: any[]; documents: any[]; divergences: any[]; totals: { documents: number; divergences: number; errors: number; audited: number } };
 const navigation: { id: Section; label: string; icon: string }[] = [
@@ -24,6 +24,7 @@ const navigation: { id: Section; label: string; icon: string }[] = [
   { id: 'newEmails', label: 'Novos e-mails', icon: '✉' },
   { id: 'emails', label: 'E-mails', icon: '▣' },
   { id: 'search', label: 'Pesquisa', icon: '⌕' },
+  { id: 'invoices', label: 'Faturas', icon: '▧' },
 ];
 
 export default function Home() {
@@ -54,6 +55,10 @@ export default function Home() {
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewError, setReviewError] = useState('');
   const [reviewSuccess, setReviewSuccess] = useState('');
+  const [invoiceData, setInvoiceData] = useState<any[]>([]);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [invoiceError, setInvoiceError] = useState('');
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
 
   const loadAuditData = useCallback(async () => {
     setDataLoading(true);
@@ -69,6 +74,28 @@ export default function Home() {
       setDataLoading(false);
     }
   }, []);
+
+  async function loadInvoices() {
+    setInvoiceLoading(true); setInvoiceError('');
+    try {
+      const response = await fetch('/api/outlook/invoices', { method: 'GET', cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível conferir as faturas.');
+      setInvoiceData(data.invoices || []);
+    } catch (error) { setInvoiceError(error instanceof Error ? error.message : 'Falha ao carregar faturas.'); }
+    finally { setInvoiceLoading(false); }
+  }
+
+  async function scanInvoices() {
+    setInvoiceLoading(true); setInvoiceError('');
+    try {
+      const response = await fetch('/api/outlook/invoices', { method: 'POST', cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível processar as faturas.');
+      setInvoiceData(data.invoices || []);
+    } catch (error) { setInvoiceError(error instanceof Error ? error.message : 'Falha ao processar faturas.'); }
+    finally { setInvoiceLoading(false); }
+  }
 
   async function loadDailyConfirmation() {
     try {
@@ -199,6 +226,7 @@ export default function Home() {
     newEmails: { title: 'Novos e-mails', subtitle: 'Mensagens recebidas hoje, considerando a virada do dia à meia-noite no horário de Brasília.' },
     emails: { title: 'E-mails', subtitle: 'Gerencie a conexão com Outlook e acompanhe as mensagens sincronizadas.' },
     search: { title: 'Pesquisa', subtitle: 'Encontre documentos por dia de recebimento ou número do CT-e.' },
+    invoices: { title: 'Conferência de faturas', subtitle: 'Compare cada CT-e cobrado pela Danúbio com o documento original recebido por e-mail.' },
   };
 
   function renderDocument(doc: any) {
@@ -264,6 +292,29 @@ export default function Home() {
         {dataLoading && <p className="subtle-message">Atualizando indicadores...</p>}
         {dataError && <div className="mail-error">{dataError}</div>}
       </>}
+
+      {activeSection === 'invoices' && <section className="data-section">
+        <div className="section-toolbar"><div><h2>Faturas da Danúbio</h2><p>Leitura dos PDFs recebidos por e-mail e comparação com os CT-es originais. Histórico respeita a retenção de 20 dias.</p></div><div className="invoice-toolbar"><button className="refresh-button" onClick={() => void loadInvoices()} disabled={invoiceLoading}>Atualizar</button><button onClick={() => void scanInvoices()} disabled={invoiceLoading || !connected}>{invoiceLoading ? 'Conferindo PDFs...' : 'Buscar e conferir faturas no Outlook'}</button></div></div>
+        {invoiceError && <div className="mail-error">{invoiceError}</div>}
+        {!connected && <div className="alert warning">Conecte o Outlook na aba E-mails para localizar as faturas.</div>}
+        {invoiceLoading && <div className="empty-state">Lendo PDFs das faturas e comparando os documentos...</div>}
+        {!invoiceLoading && invoiceData.length === 0 && <div className="empty-state"><span>▧</span><b>Nenhuma fatura processada</b><p>Use “Buscar e conferir faturas no Outlook”. O sistema procura PDFs de fatura da Danúbio nos e-mails ainda dentro dos 20 dias.</p></div>}
+        <div className="record-list">{invoiceData.map((invoice:any) => {
+          const items=invoice.items||[]; const meta=invoice.extraction_data||{}; const counts=meta.statuses||{}; const expanded=selectedInvoiceId===invoice.id;
+          const label=(s:string)=>({matched:'Confere',weight_difference:'Peso divergente',value_difference:'Valor divergente',both_different:'Peso e valor divergentes',not_found:'CT-e não localizado',duplicate:'CT-e duplicado',needs_review:'Revisar'} as Record<string,string>)[s]||s;
+          return <article className="record-card" key={invoice.id}>
+            <button className="invoice-card-toggle" onClick={()=>setSelectedInvoiceId(expanded?null:invoice.id)}>
+              <div className="record-heading"><div><b>Fatura nº {invoice.invoice_number||'Não identificada'} · {invoice.file_name}</b><small>Emitida: {invoice.issued_at||'Não identificada'} · Vencimento: {invoice.due_at||'Não identificado'}</small></div><span className={'record-status '+(invoice.processing_status==='processed'?'accepted':'needs_review')}>{invoice.processing_status==='processed'?'Extraída':'Revisar extração'}</span></div>
+              <div className="record-grid"><span>CT-es na fatura<strong>{invoice.document_count??items.length}</strong></span><span>Peso total<strong>{invoice.total_weight!=null?Number(invoice.total_weight).toLocaleString('pt-BR')+' kg':'Não identificado'}</strong></span><span>Total da fatura<strong>{brl(invoice.total_invoice)}</strong></span><span>Confere<strong>{counts.matched||0}</strong></span><span>Divergências<strong>{(counts.weight_difference||0)+(counts.value_difference||0)+(counts.both_different||0)}</strong></span><span>Não localizados<strong>{counts.not_found||0}</strong></span></div>
+              <div className="invoice-expand-label">{expanded?'Ocultar documentos ▲':'Ver conferência dos CT-es ▼'}</div>
+            </button>
+            {expanded && <div className="invoice-items-wrap">
+              <div className="invoice-totals"><b>Fechamento dos itens extraídos</b><span>Quantidade: {meta.totalsCheck?.countItems??items.length} / {invoice.document_count??'—'}</span><span>Peso somado: {meta.totalsCheck?.weightItems!=null?Number(meta.totalsCheck.weightItems).toLocaleString('pt-BR')+' kg':'—'}</span><span>Soma dos fretes: {brl(meta.totalsCheck?.sumItems)}</span></div>
+              <div className="invoice-table-scroll"><table className="invoice-table"><thead><tr><th>CT-e</th><th>NF</th><th>Peso fatura</th><th>Peso CT-e</th><th>Dif. peso</th><th>Valor fatura</th><th>Valor CT-e</th><th>Situação</th></tr></thead><tbody>{items.map((item:any)=><tr key={item.id}><td>{item.cte_number||'—'}</td><td>{item.invoice_number||'—'}</td><td>{item.weight_kg!=null?Number(item.weight_kg).toLocaleString('pt-BR')+' kg':'—'}</td><td>{item.original_weight_kg!=null?Number(item.original_weight_kg).toLocaleString('pt-BR')+' kg':'Não localizado'}</td><td>{item.weight_difference!=null?Number(item.weight_difference).toLocaleString('pt-BR')+' kg':'—'}</td><td>{brl(item.charged_total)}</td><td>{brl(item.original_freight_total)}</td><td><span className={'record-status '+(item.comparison_status==='matched'?'accepted':'needs_review')}>{label(item.comparison_status)}</span></td></tr>)}</tbody></table></div>
+            </div>}
+          </article>;
+        })}</div>
+      </section>}
 
       {activeSection === 'search' && (() => {
         const normalizedCte = searchCte.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
