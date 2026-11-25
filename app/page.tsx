@@ -377,7 +377,7 @@ export default function Home() {
         })}</div>
         {selectedInvoiceDiscrepancy && (() => {
           const { invoice, item } = selectedInvoiceDiscrepancy;
-          const statusText = label(item.comparison_status);
+          const statusText = ({matched:'Confere',weight_difference:'Peso divergente',value_difference:'Valor divergente',both_different:'Peso e valor divergentes',not_found:'CT-e não localizado',duplicate:'CT-e duplicado',needs_review:'Revisar'} as Record<string,string>)[item.comparison_status] || item.comparison_status || 'Revisar';
           const charged = Number(item.charged_total);
           const original = item.original_freight_total == null ? null : Number(item.original_freight_total);
           const chargedWeight = item.weight_kg == null ? null : Number(item.weight_kg);
