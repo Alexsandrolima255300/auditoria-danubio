@@ -115,7 +115,8 @@ export async function POST(req:NextRequest){
         const source:any[]=[];
         for(const x of auditCandidates){
           const raw=String(x.extracted_fields?.extractedTextSample||"");
-          const header=raw.match(/CTE\s*N[º°]?\s*DOCUMENTO:\s*(\d+)\s+S[ÉE]RIE:\s*(\d+)/i);\n          const cte=header?header[2]+"/"+header[1]:(raw.match(/CTE\s*(?:N[º°]|NUMERO)?\s*[:.]?\s*(\d+\/\d+)/i)?.[1]||null);
+          const header=raw.match(/CTE\s*N[º°]?\s*DOCUMENTO:\s*(\d+)\s+S[ÉE]RIE:\s*(\d+)/i);
+          const cte=header?header[2]+"/"+header[1]:(raw.match(/CTE\s*(?:N[º°]|NUMERO)?\s*[:.]?\s*(\d+\/\d+)/i)?.[1]||null);
           if(cte)source.push({...x,cte});
         }
         const payload:any[]=[];
