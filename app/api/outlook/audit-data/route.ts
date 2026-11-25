@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
 
     const messages = await db(
       "email_messages?select=id,graph_message_id,subject,sender_name,sender_email,received_at,has_attachments,processing_status&connection_id=eq." +
-      encodeURIComponent(connection.id) + "&order=received_at.desc&limit=500"
+      encodeURIComponent(connection.id) + "&order=received_at.desc&limit=2000"
     );
 
     if (!messages.length) {
