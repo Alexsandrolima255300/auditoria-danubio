@@ -45,10 +45,15 @@ export async function GET(request: NextRequest) {
 
     const messageMap = new Map(messages.map((m: any) => [m.id, m]));
     const auditMap = new Map(audits.map((a: any) => [a.attachment_id, a]));
+    const reviews = attachmentIds.length
+      ? await db("freight_divergence_reviews?select=*&attachment_id=in.(" + attachmentIds.join(",") + ")")
+      : [];
+    const reviewMap = new Map(reviews.map((r: any) => [r.attachment_id, r]));
     const documents = attachments.map((attachment: any) => ({
       ...attachment,
       email: messageMap.get(attachment.email_message_id) || null,
       audit: auditMap.get(attachment.id) || null,
+      review: reviewMap.get(attachment.id) || null,
     }));
 
     const divergences = documents.filter((doc: any) =>
