@@ -35,6 +35,7 @@ export default function Home() {
   const [mailError, setMailError] = useState('');
   const [connected, setConnected] = useState(false);
   const [mailCount, setMailCount] = useState<number | null>(null);
+  const [emailFolderState, setEmailFolderState] = useState<Record<string, boolean>>({});
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditResult, setAuditResult] = useState<any>(null);
   const [auditProgress, setAuditProgress] = useState({ processed: 0, percent: 0, running: false });
@@ -400,8 +401,18 @@ export default function Home() {
           </div>
           {(auditLoading || auditResult) && <div className="mail-list progress-panel"><h4>{auditLoading ? 'Auditoria em andamento' : 'Progresso da auditoria'}</h4><div className="progress-track"><div className="progress-value" style={{ width: auditProgress.percent + '%' }} /></div><small>{auditProgress.percent}% · {auditProgress.processed} e-mail(s) processado(s){auditLoading ? ' · lendo próximos lotes automaticamente...' : ' · processamento pausado/concluído'}</small></div>}
           {auditResult && <div className="mail-success">Varredura: {auditResult.emailsFound} e-mails, {auditResult.pdfsRead} PDFs lidos, {auditResult.auditsCreated} auditorias salvas, {auditResult.errors} erros. {auditResult.hasMore ? 'Ainda há mensagens pendentes; execute novamente para retomar.' : 'Busca concluída.'}</div>}
-          <div className="mail-list"><h4>E-mails sincronizados · atualização automática a cada minuto</h4>
-            {emails.length ? emails.map(mail => <article key={mail.id} className="mail-item"><div><b>{mail.subject}</b><small>{mail.sender} · {dateTime(mail.receivedAt)}</small><p>{mail.preview}</p></div><div className="mail-meta">{mail.hasAttachments && <span className="pill">Com anexo</span>}{mail.webLink && <a href={mail.webLink} target="_blank" rel="noreferrer">Abrir e-mail</a>}</div></article>) : <p className="subtle-message">Nenhuma mensagem sincronizada até o momento.</p>}
+          <div className="mail-list">
+            <div className="email-folders-heading"><div><h4>E-mails organizados por dia</h4><p>{emails.length} mensagem(ns) carregada(s) · histórico disponível por até 20 dias</p></div><span className="email-folder-count">{Object.keys(emails.reduce((groups: Record<string, Mail[]>, mail) => { const key = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(mail.receivedAt)); (groups[key] ||= []).push(mail); return groups; }, {})).length} dia(s)</span></div>
+            {emails.length ? Object.entries(emails.reduce((groups: Record<string, Mail[]>, mail) => { const key = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(mail.receivedAt)); (groups[key] ||= []).push(mail); return groups; }, {})).sort(([a], [b]) => b.localeCompare(a)).map(([day, dayEmails]) => {
+              const expanded = emailFolderState[day] ?? day === brazilDate;
+              const dayLabel = new Date(day + 'T12:00:00-03:00').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+              return <section className="email-day-folder" key={day}>
+                <button className="email-folder-toggle" aria-expanded={expanded} onClick={() => setEmailFolderState(current => ({ ...current, [day]: !expanded }))}>
+                  <span className="email-folder-icon">{expanded ? '▾' : '▸'}</span><span className="email-folder-title"><b>{dayLabel}</b><small>{dayEmails.length} e-mail(s)</small></span><span className="email-folder-state">{expanded ? 'Recolher' : 'Abrir pasta'}</span>
+                </button>
+                {expanded && <div className="email-folder-content">{dayEmails.map(mail => <article key={mail.id} className="mail-item"><div><b>{mail.subject}</b><small>{mail.sender} · {dateTime(mail.receivedAt)}</small><p>{mail.preview}</p></div><div className="mail-meta">{mail.hasAttachments && <span className="pill">Com anexo</span>}{mail.webLink && <a href={mail.webLink} target="_blank" rel="noreferrer">Abrir e-mail</a>}</div></article>)}</div>}
+              </section>;
+            }) : <p className="subtle-message">Nenhuma mensagem sincronizada até o momento.</p>}
           </div>
         </div>
         <span className={connected ? 'not-connected connected' : 'not-connected'}>{connected ? 'Conectado' : 'Aguardando conexão'}</span>
