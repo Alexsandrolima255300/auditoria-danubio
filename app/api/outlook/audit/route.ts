@@ -145,8 +145,13 @@ export async function POST(request: NextRequest) {
       nextLink = null;
     } else {
       syncStartedAt = checkpoint.syncStartedAt || new Date().toISOString();
-      const since = checkpoint.lastSyncAt
-        ? new Date(new Date(checkpoint.lastSyncAt).getTime() - 5 * 60 * 1000).toISOString()
+      let lastSyncAt = checkpoint.lastSyncAt || null;
+      if (!lastSyncAt) {
+        const latestSaved = await db("email_messages?select=received_at&connection_id=eq." + connectionId + "&order=received_at.desc&limit=1");
+        if (latestSaved?.[0]?.received_at) lastSyncAt = latestSaved[0].received_at;
+      }
+      const since = lastSyncAt
+        ? new Date(new Date(lastSyncAt).getTime() - 10 * 60 * 1000).toISOString()
         : new Date(Date.now() - 10 * 60 * 1000).toISOString();
       const batch = await listIncremental(tokens.access_token, checkpoint.nextLink || null, since);
       messages = batch.items;
