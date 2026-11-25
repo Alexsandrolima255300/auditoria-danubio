@@ -57,6 +57,7 @@ export default function Home() {
   const [reviewSuccess, setReviewSuccess] = useState('');
   const [invoiceData, setInvoiceData] = useState<any[]>([]);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [invoiceProgress, setInvoiceProgress] = useState({ processed: 0, total: 0, percent: 0 });
   const [invoiceError, setInvoiceError] = useState('');
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
 
@@ -88,11 +89,23 @@ export default function Home() {
 
   async function scanInvoices() {
     setInvoiceLoading(true); setInvoiceError('');
+    setInvoiceProgress({ processed: 0, total: 0, percent: 0 });
     try {
-      const response = await fetch('/api/outlook/invoices', { method: 'POST', cache: 'no-store' });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Não foi possível processar as faturas.');
-      setInvoiceData(data.invoices || []);
+      let offset = 0;
+      let total = 0;
+      let keepGoing = true;
+      while (keepGoing) {
+        const response = await fetch(`/api/outlook/invoices?offset=${offset}&batch=5`, { method: 'POST', cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Não foi possível processar as faturas.');
+        total = Number(data.totalEmails || 0);
+        offset = Number(data.nextOffset || offset);
+        const processed = Math.min(offset, total);
+        setInvoiceProgress({ processed, total, percent: total ? Math.round(processed / total * 100) : 100 });
+        setInvoiceData(data.invoices || []);
+        keepGoing = Boolean(data.hasMore);
+        if (!total) break;
+      }
     } catch (error) { setInvoiceError(error instanceof Error ? error.message : 'Falha ao processar faturas.'); }
     finally { setInvoiceLoading(false); }
   }
@@ -295,6 +308,11 @@ export default function Home() {
 
       {activeSection === 'invoices' && <section className="data-section">
         <div className="section-toolbar"><div><h2>Faturas da Danúbio</h2><p>Leitura dos PDFs recebidos por e-mail e comparação com os CT-es originais. Histórico respeita a retenção de 20 dias.</p></div><div className="invoice-toolbar"><button className="refresh-button" onClick={() => void loadInvoices()} disabled={invoiceLoading}>Atualizar</button><button onClick={() => void scanInvoices()} disabled={invoiceLoading || !connected}>{invoiceLoading ? 'Conferindo PDFs...' : 'Buscar e conferir faturas no Outlook'}</button></div></div>
+        {invoiceLoading && <div className="invoice-progress" role="status" aria-live="polite">
+          <div className="invoice-progress-heading"><b>Conferência em andamento</b><strong>{invoiceProgress.percent}%</strong></div>
+          <div className="invoice-progress-track"><div className="invoice-progress-fill" style={{ width: invoiceProgress.percent + '%' }} /></div>
+          <div className="invoice-progress-detail"><span>{invoiceProgress.processed} de {invoiceProgress.total} e-mails verificados</span><span>Faltam {Math.max(0, invoiceProgress.total - invoiceProgress.processed)}</span></div>
+        </div>}
         {invoiceError && <div className="mail-error">{invoiceError}</div>}
         {!connected && <div className="alert warning">Conecte o Outlook na aba E-mails para localizar as faturas.</div>}
         {invoiceLoading && <div className="empty-state">Lendo PDFs das faturas e comparando os documentos...</div>}
