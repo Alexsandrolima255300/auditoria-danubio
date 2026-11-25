@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
     for (const m of [...danubio.items, ...siimp.items]) unique.set(m.id, m);
     const messages = [...unique.values()].sort((a,b) => new Date(a.receivedDateTime).getTime() - new Date(b.receivedDateTime).getTime());
 
-    let emailsSaved = 0, attachmentsSaved = 0, pdfsRead = 0, auditsCreated = 0, ignored = 0, errors = 0;
+    let emailsSaved = 0, attachmentsSaved = 0, pdfsRead = 0, auditsCreated = 0, ignored = 0, alreadyProcessedSkipped = 0, errors = 0;
     const results: any[] = [];
     for (const mail of messages) {
       try {
@@ -158,6 +158,7 @@ export async function POST(request: NextRequest) {
           const previousAttachment = previousAttachments?.[0];
           if (previousAttachment?.processing_status === "extracted" && payload.reprocessProcessed !== true) {
             ignored++;
+            alreadyProcessedSkipped++;
             continue;
           }
           const savedAttachments = await db("freight_attachments?on_conflict=email_message_id,graph_attachment_id", {
@@ -210,7 +211,7 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({
       ok: true, mailbox, searched: ["Danubio", "Siimp Sistemas"], emailsFound: messages.length,
       emailsSaved, attachmentsSaved, pdfsRead, auditsCreated, ignored, errors,
-      alreadyProcessedSkipped: ignored,
+      alreadyProcessedSkipped,
       hasMore: danubio.hasMore || siimp.hasMore,
       nextDanubio: danubio.nextLink, nextSiimp: siimp.nextLink,
       doneDanubio: !danubio.hasMore, doneSiimp: !siimp.hasMore, results,
