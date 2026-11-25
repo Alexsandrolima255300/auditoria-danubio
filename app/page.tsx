@@ -78,7 +78,7 @@ export default function Home() {
     setAuditProgress({ processed: 0, percent: 0, running: true });
     // A varredura normal retoma pelo checkpoint salvo no Supabase.
     // O cursor local é usado somente na releitura manual de PDFs antigos.
-    let cursor = { cursorDanubio: null, cursorSiimp: null, doneDanubio: false, doneSiimp: false };
+    let cursor: any = { cursorDanubio: null, cursorSiimp: null, doneDanubio: false, doneSiimp: false };
     let totals = { emailsFound: 0, pdfsRead: 0, auditsCreated: 0, errors: 0, ignored: 0 };
     let allResults: any[] = [];
     try {
