@@ -18,7 +18,10 @@ export default function Home() {
   const [mailLoading, setMailLoading] = useState(false);
   const [mailError, setMailError] = useState('');
   const [connected, setConnected] = useState(false);
-  const [mailCount, setMailCount] = useState<number | null>(null);\n  const [auditLoading, setAuditLoading] = useState(false);\n  const [auditResult, setAuditResult] = useState<any>(null);\n  const [auditCursor, setAuditCursor] = useState<any>({ cursorDanubio: null, cursorSiimp: null });
+  const [mailCount, setMailCount] = useState<number | null>(null);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditResult, setAuditResult] = useState<any>(null);
+  const [auditCursor, setAuditCursor] = useState<any>({ cursorDanubio: null, cursorSiimp: null });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
