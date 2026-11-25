@@ -1,65 +1,43 @@
 import { NextRequest, NextResponse } from "next/server";
-import { openToken, refreshMicrosoftToken, sealToken } from "../../../../lib/microsoft";
 
 export const dynamic = "force-dynamic";
 
-async function graphSearch(accessToken: string, term: string) {
-  const url = new URL("https://graph.microsoft.com/v1.0/me/messages");
-  url.searchParams.set("$search", `"${term}"`);
-  url.searchParams.set("$top", "50");
-  url.searchParams.set("$select", "id,subject,from,receivedDateTime,hasAttachments,bodyPreview,webLink,internetMessageId");
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}`, ConsistencyLevel: "eventual" },
-    cache: "no-store",
+const PROJECT_URL = process.env.SUPABASE_URL || "https://shzyfxkjsssjpmesvhxu.supabase.co";
+
+async function db(path: string) {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) throw new Error("Falta cadastrar SUPABASE_SERVICE_ROLE_KEY na Vercel.");
+  const response = await fetch(PROJECT_URL + "/rest/v1/" + path, {
+    headers: { apikey: key, Authorization: "Bearer " + key }, cache: "no-store",
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error?.message || `Microsoft Graph retornou HTTP ${response.status}.`);
-  return (data.value || []) as Array<Record<string, any>>;
+  const body = await response.text();
+  if (!response.ok) throw new Error("Supabase: " + body.slice(0, 400));
+  return body ? JSON.parse(body) : [];
 }
 
 export async function GET(request: NextRequest) {
-  const encryptedRefresh = request.cookies.get("outlook_refresh")?.value;
-  if (!encryptedRefresh) return NextResponse.json({ connected: false, error: "Outlook ainda não conectado." }, { status: 401 });
+  // A tela consulta o banco local; não dispara uma nova busca no Outlook a cada minuto.
+  if (!request.cookies.get("outlook_refresh")?.value) {
+    return NextResponse.json({ connected: false, error: "Outlook ainda não conectado." }, { status: 401 });
+  }
   try {
-    const refreshToken = openToken(encryptedRefresh);
-    const tokens = await refreshMicrosoftToken(refreshToken);
-    const [danubio, siimp] = await Promise.all([
-      graphSearch(tokens.access_token, "Danubio"),
-      graphSearch(tokens.access_token, "Siimp Sistemas"),
-    ]);
-    const unique = new Map<string, Record<string, any>>();
-    for (const mail of [...danubio, ...siimp]) unique.set(mail.id, mail);
-    const emails = [...unique.values()]
-      .filter((mail) => {
-        const sender = mail.from?.emailAddress?.name || "";
-        const address = mail.from?.emailAddress?.address || "";
-        const text = `${mail.subject || ""} ${mail.bodyPreview || ""}`;
-        return /siimp/i.test(sender + " " + address) || /danubio/i.test(text);
-      })
-      .sort((a, b) => new Date(b.receivedDateTime).getTime() - new Date(a.receivedDateTime).getTime())
-      .slice(0, 50)
-      .map((mail) => ({
-        id: mail.id,
-        subject: mail.subject || "(sem assunto)",
-        sender: mail.from?.emailAddress?.name || mail.from?.emailAddress?.address || "Remetente desconhecido",
-        senderEmail: mail.from?.emailAddress?.address || "",
-        receivedAt: mail.receivedDateTime,
-        hasAttachments: Boolean(mail.hasAttachments),
-        preview: mail.bodyPreview || "",
-        webLink: mail.webLink || "",
-      }));
-    const response = NextResponse.json({ connected: true, count: emails.length, emails });
-    if (tokens.refresh_token) {
-      response.cookies.set("outlook_refresh", sealToken(tokens.refresh_token), {
-        httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 60 * 60 * 24 * 30, path: "/",
-      });
-    }
-    return response;
+    const connections = await db("outlook_connections?select=id,mailbox_email&revoked_at=is.null&order=last_refreshed_at.desc&limit=1");
+    if (!connections?.length) return NextResponse.json({ connected: false, error: "Outlook ainda não conectado." }, { status: 401 });
+    const connection = connections[0];
+    const rows = await db("email_messages?select=graph_message_id,subject,sender_name,sender_email,received_at,has_attachments&connection_id=eq." +
+      encodeURIComponent(connection.id) + "&order=received_at.desc&limit=50");
+    const emails = (rows || []).map((mail: any) => ({
+      id: mail.graph_message_id,
+      subject: mail.subject || "(sem assunto)",
+      sender: mail.sender_name || mail.sender_email || "Remetente desconhecido",
+      senderEmail: mail.sender_email || "",
+      receivedAt: mail.received_at,
+      hasAttachments: Boolean(mail.has_attachments),
+      preview: "Mensagem registrada na última sincronização.",
+      webLink: "",
+    }));
+    return NextResponse.json({ connected: true, mailbox: connection.mailbox_email, count: emails.length, emails });
   } catch (error) {
-    const response = NextResponse.json({ connected: false, error: error instanceof Error ? error.message : "Falha ao consultar Outlook." }, { status: 400 });
-    if (/invalid_grant|revoked|Sessão do Outlook inválida/i.test(error instanceof Error ? error.message : "")) {
-      response.cookies.set("outlook_refresh", "", { httpOnly: true, maxAge: 0, path: "/" });
-    }
-    return response;
+    return NextResponse.json({ connected: false, error: error instanceof Error ? error.message : "Falha ao consultar mensagens salvas." }, { status: 400 });
   }
 }
