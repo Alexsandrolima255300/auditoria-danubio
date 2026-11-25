@@ -16,7 +16,7 @@ export async function middleware(request: NextRequest) {
   const isMicrosoftCallback = pathname === "/api/auth/microsoft/callback";
   if (isMicrosoftCallback || isAuthorizedCron(request)) return NextResponse.next();
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !key) {
     if (pathname.startsWith("/api/")) {
