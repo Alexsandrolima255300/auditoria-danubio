@@ -302,6 +302,13 @@ export default function Home() {
                 const icms = audit.extracted_fields?.icmsValue;
                 const baseFreight = audit.freight_charge;
                 const gross = audit.extracted_fields?.grossFreight ?? freight;
+                const grossNumber = Number(gross);
+                const invoiceNumber = Number(audit.invoice_value);
+                const weightNumber = Number(audit.weight_kg);
+                const impliedPercent = Number.isFinite(grossNumber) && grossNumber >= 0 && Number.isFinite(invoiceNumber) && invoiceNumber > 0
+                  ? (grossNumber / invoiceNumber) * 100 : null;
+                const impliedPerKg = Number.isFinite(grossNumber) && grossNumber >= 0 && Number.isFinite(weightNumber) && weightNumber > 0
+                  ? grossNumber / weightNumber : null;
                 const cteNumber = textField(raw, /CTE Nº DOCUMENTO:\s*([^\s]+)/i);
                 const product = textField(raw, /PRODUTO PREDOMINANTE\s+(.+?)\s+OUTRAS CARACTERÍSTICAS/i);
                 const volumes = textField(raw, /QUANTIDADE DE VOLUMES \(UND\)\s*([\d.,]+)/i);
@@ -331,6 +338,12 @@ export default function Home() {
                     <span>Valor de referência<strong>{brl(audit.reference_minimum)}</strong></span>
                     <span>Diferença apurada<strong>{brl(audit.discrepancy_amount)}</strong></span>
                   </div>
+                  <h4>Equivalência da cobrança</h4>
+                  <div className="record-grid">
+                    <span>Se fosse cobrado por percentual da NF<strong>{impliedPercent !== null ? impliedPercent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%' : 'Não calculável — valor da NF ausente'}</strong></span>
+                    <span>Se fosse cobrado por peso<strong>{impliedPerKg !== null ? brl(impliedPerKg) + ' por kg' : 'Não calculável — peso ausente'}</strong></span>
+                  </div>
+                  <p className="detail-note">Equivalência calculada usando o frete total com ICMS: percentual = frete total ÷ valor da NF × 100; valor por kg = frete total ÷ peso bruto. São taxas equivalentes da cobrança, não tarifas contratuais confirmadas.</p>
                   <p className="detail-note">Os valores são apresentados conforme os campos extraídos do CT-e. O frete total considera o ICMS, conforme a regra de auditoria.</p>
                 </>;
               })()}
