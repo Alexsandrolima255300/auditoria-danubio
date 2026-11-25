@@ -76,7 +76,12 @@ export default function Home() {
   async function runAudit(reprocessProcessed = false) {
     setAuditLoading(true); setMailError(''); setAuditResult(null);
     setAuditProgress({ processed: 0, percent: 0, running: true });
-    let cursor = { ...auditCursor };
+    // Só retoma o cursor quando a varredura anterior ficou incompleta.
+    // Uma nova varredura (ou releitura manual) sempre começa do início.
+    const shouldResume = auditResult?.hasMore === true && !reprocessProcessed;
+    let cursor = shouldResume
+      ? { ...auditCursor }
+      : { cursorDanubio: null, cursorSiimp: null, doneDanubio: false, doneSiimp: false };
     let totals = { emailsFound: 0, pdfsRead: 0, auditsCreated: 0, errors: 0, ignored: 0 };
     let allResults: any[] = [];
     try {
