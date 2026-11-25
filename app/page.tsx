@@ -66,7 +66,8 @@ export default function Home() {
       setMailError(error instanceof Error ? error.message : 'Erro na auditoria.');
     } finally { setAuditLoading(false); }
   }
-\n  const kg = Number(peso.replace(',', '.')) || 0;
+
+  const kg = Number(peso.replace(',', '.')) || 0;
   const nf = Number(nota.replace(',', '.')) || 0;
   const valorCobrado = cents(Number(cobrado.replace(',', '.')) || 0);
   const pesoCalc = cents(kg * 0.7);
