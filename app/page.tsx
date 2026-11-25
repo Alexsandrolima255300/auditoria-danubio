@@ -11,10 +11,6 @@ const textField = (text: string, pattern: RegExp) => {
   const match = text.match(pattern);
   return match?.[1]?.trim() || 'Não identificado no PDF';
 };
-const numberField = (text: string, pattern: RegExp) => {
-  const value = textField(text, pattern);
-  return value === 'Não identificado no PDF' ? value : value.replace(/\\s+/g, ' ');
-};
 const statusLabel = (status?: string) => (({ accepted: 'Aceito', divergent: 'Divergência', needs_review: 'Revisão necessária', out_of_scope: 'Fora do escopo', pending: 'Pendente', extracted: 'Extraído', error: 'Erro na leitura', discovered: 'Localizado', attachments_checked: 'Anexos conferidos' } as Record<string, string>)[status || ''] || status || 'Não informado');
 
 type Section = 'overview' | 'documents' | 'divergences' | 'newEmails' | 'emails';
@@ -305,14 +301,14 @@ export default function Home() {
                 const icms = audit.extracted_fields?.icmsValue;
                 const baseFreight = audit.freight_charge;
                 const gross = audit.extracted_fields?.grossFreight ?? freight;
-                const cteNumber = textField(raw, /CTE Nº DOCUMENTO:\\s*([^\\s]+)/i);
-                const product = textField(raw, /PRODUTO PREDOMINANTE\\s+(.+?)\\s+OUTRAS CARACTERÍSTICAS/i);
-                const volumes = textField(raw, /QUANTIDADE DE VOLUMES \\(UND\\)\\s*([\\d.,]+)/i);
-                const cubage = textField(raw, /CUBAGEM \\(M3\\)\\s*([\\d.,]+)/i);
-                const origin = textField(raw, /INICIO DA PRESTAÇÃO\\s+(.+?)\\s+TERMINO DA PRESTAÇÃO/i);
-                const destination = textField(raw, /TERMINO DA PRESTAÇÃO\\s+(.+?)\\s+REMETENTE:/i);
-                const receiver = textField(raw, /VALOR A RECEBER\\s*([\\d.,]+)/i);
-                const icmsRate = textField(raw, /ALÍQUOTA DO ICMS\\s*([\\d.,]+)\\s*/i);
+                const cteNumber = textField(raw, /CTE Nº DOCUMENTO:\s*([^\s]+)/i);
+                const product = textField(raw, /PRODUTO PREDOMINANTE\s+(.+?)\s+OUTRAS CARACTERÍSTICAS/i);
+                const volumes = textField(raw, /QUANTIDADE DE VOLUMES \(UND\)\s*([\d.,]+)/i);
+                const cubage = textField(raw, /CUBAGEM \(M3\)\s*([\d.,]+)/i);
+                const origin = textField(raw, /INICIO DA PRESTAÇÃO\s+(.+?)\s+TERMINO DA PRESTAÇÃO/i);
+                const destination = textField(raw, /TERMINO DA PRESTAÇÃO\s+(.+?)\s+REMETENTE:/i);
+                const receiver = textField(raw, /VALOR A RECEBER\s*([\d.,]+)/i);
+                const icmsRate = textField(raw, /ALÍQUOTA DO ICMS\s*([\d.,]+)\s*/i);
                 return <>
                   <div className="record-grid">
                     <span>Número do CT-e<strong>{cteNumber}</strong></span>
