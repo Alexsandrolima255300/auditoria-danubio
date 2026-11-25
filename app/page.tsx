@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import LogoutButton from '../components/logout-button';
 
 const brl = (n: number | string | null | undefined) => {
   const value = typeof n === 'string' ? Number(n) : n;
@@ -234,7 +235,7 @@ export default function Home() {
     <section className="content">
       <header>
         <div><span className="overline">PAINEL DE CONTROLE</span><h1>{sectionInfo[activeSection].title}</h1><p>{sectionInfo[activeSection].subtitle}</p></div>
-        <span className="status">● Transportadora: Danúbio</span>
+        <div className="header-actions"><span className="status">● Transportadora: Danúbio</span><LogoutButton /></div>
       </header>
 
       {activeSection === 'overview' && <>
