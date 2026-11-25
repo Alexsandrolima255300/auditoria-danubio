@@ -50,7 +50,6 @@ async function searchAll(accessToken: string, term: string, maxMessages: number,
 async function listIncremental(accessToken: string, startingUrl: string | null, since: string) {
   const first = new URL("https://graph.microsoft.com/v1.0/me/messages");
   first.searchParams.set("$filter", "receivedDateTime ge " + since);
-  first.searchParams.set("$orderby", "receivedDateTime asc");
   first.searchParams.set("$top", "2");
   first.searchParams.set("$select", "id,subject,from,receivedDateTime,hasAttachments,internetMessageId,conversationId,bodyPreview");
   const url = startingUrl || first.toString();
