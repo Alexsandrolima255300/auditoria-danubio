@@ -13,7 +13,7 @@ export type ExtractedCte = {
 };
 
 function money(value: string): number | null {
-  const cleaned = value.replace(/R\\$\\s*/gi, "").replace(/\\s/g, "").replace(/\\.(?=\\d{3}(?:,|$))/g, "").replace(",", ".");
+  const cleaned = value.replace(/R\$\s*/gi, "").replace(/\s/g, "").replace(/\.(?=\d{3}(?:,|$))/g, "").replace(",", ".");
   const n = Number(cleaned);
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
 }
@@ -26,7 +26,7 @@ function first(text: string, patterns: RegExp[]): string | null {
 }
 function parseMoney(text: string, labels: string[]): number | null {
   for (const label of labels) {
-    const re = new RegExp(label + "[^\\\\d]{0,35}(?:R\\\\$\\\\s*)?([\\\\d.]+,\\\\d{2}|\\\\d+,\\\\d{2})", "i");
+    const re = new RegExp(label + "[^\\d]{0,35}(?:R\\$\\s*)?([\\d.]+,\\d{2}|\\d+,\\d{2})", "i");
     const match = text.match(re);
     if (match?.[1]) return money(match[1]);
   }
@@ -35,22 +35,22 @@ function parseMoney(text: string, labels: string[]): number | null {
 
 export async function extractCte(buffer: Buffer): Promise<ExtractedCte> {
   const parsed = await pdfParse(buffer);
-  const text = (parsed.text || "").replace(/\\u00a0/g, " ").replace(/[ \\t]+/g, " ");
+  const text = (parsed.text || "").replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ");
   const name = first(text, [
-    /TOMADOR(?: DO SERVICO| DO SERVIÇO)?\\s*[:\\n-]+\\s*([^\\n]{4,100})/i,
-    /NOME\\s*\\/\\s*RAZAO SOCIAL[^\\n]*\\n\\s*([^\\n]{4,100})/i,
+    /TOMADOR(?: DO SERVICO| DO SERVIÇO)?\s*[:\n-]+\s*([^\n]{4,100})/i,
+    /NOME\s*\/\s*RAZAO SOCIAL[^\n]*\n\s*([^\n]{4,100})/i,
   ]);
   const cnpjRaw = first(text, [
-    /CNPJ\\s*[:\\n-]*\\s*([\\d./-]{14,18})/i,
-    /\\b(\\d{2}\\.\\d{3}\\.\\d{3}\\/\\d{4}-\\d{2})\\b/,
+    /CNPJ\s*[:\n-]*\s*([\d./-]{14,18})/i,
+    /\b(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})\b/,
   ]);
-  const cnpj = cnpjRaw ? cnpjRaw.replace(/\\D/g, "") : null;
+  const cnpj = cnpjRaw ? cnpjRaw.replace(/\D/g, "") : null;
   const invoiceValue = parseMoney(text, ["VALOR DA CARGA", "VALOR DA MERCADORIA", "VALOR TOTAL DAS MERCADORIAS", "VALOR DA NOTA"]);
   const weightRaw = first(text, [
-    /PESO(?: BRUTO| TOTAL)?(?: DA CARGA)?\\s*[:\\n-]+\\s*([\\d.,]+)\\s*(?:KG|KGS)?/i,
-    /PESO REAL\\s*[:\\n-]+\\s*([\\d.,]+)/i,
+    /PESO(?: BRUTO| TOTAL)?(?: DA CARGA)?\s*[:\n-]+\s*([\d.,]+)\s*(?:KG|KGS)?/i,
+    /PESO REAL\s*[:\n-]+\s*([\d.,]+)/i,
   ]);
-  const weightKg = weightRaw ? Number(weightRaw.replace(/\\./g, "").replace(",", ".")) : null;
+  const weightKg = weightRaw ? Number(weightRaw.replace(/\./g, "").replace(",", ".")) : null;
   const freightGross = parseMoney(text, ["VALOR A RECEBER", "VALOR TOTAL DA PRESTACAO DO SERVICO", "VALOR TOTAL DA PRESTAÇÃO DO SERVIÇO", "VALOR TOTAL DO FRETE"]);
   const icmsValue = parseMoney(text, ["VALOR DO ICMS", "VALOR ICMS"]);
   const freightNet = freightGross !== null && icmsValue !== null ? Math.round((freightGross - icmsValue) * 100) / 100 : freightGross;
