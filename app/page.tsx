@@ -23,6 +23,10 @@ export default function Home() {
   const [auditResult, setAuditResult] = useState<any>(null);
   const [auditCursor, setAuditCursor] = useState<any>({ cursorDanubio: null, cursorSiimp: null });
   const [auditProgress, setAuditProgress] = useState({ processed: 0, percent: 0, running: false });
+  const [responsibleName, setResponsibleName] = useState('');
+  const [dailyConfirmation, setDailyConfirmation] = useState<any>(null);
+  const [confirmationError, setConfirmationError] = useState('');
+  const [confirmationLoading, setConfirmationLoading] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -37,6 +41,16 @@ export default function Home() {
     }
   }, []);
 
+  async function loadDailyConfirmation() {
+    try { const r = await fetch('/api/outlook/daily-confirmation', { cache: 'no-store' }); const d = await r.json(); if (r.ok) setDailyConfirmation(d.confirmation); } catch {}
+  }
+
+  async function confirmDailyAudit() {
+    setConfirmationLoading(true); setConfirmationError('');
+    try { const r = await fetch('/api/outlook/daily-confirmation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: responsibleName }) }); const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Não foi possível confirmar.'); setDailyConfirmation(d.confirmation); setResponsibleName(''); }
+    catch (e) { setConfirmationError(e instanceof Error ? e.message : 'Falha ao confirmar.'); } finally { setConfirmationLoading(false); }
+  }
+
   async function syncEmails() {
     setMailLoading(true);
     setMailError('');
@@ -46,7 +60,7 @@ export default function Home() {
       if (!response.ok) throw new Error(data.error || 'Não foi possível consultar os e-mails.');
       setConnected(true);
       setEmails(data.emails || []);
-      setMailCount(data.count ?? 0);
+      setMailCount(data.count ?? 0);\n      await loadDailyConfirmation();
     } catch (error) {
       setMailError(error instanceof Error ? error.message : 'Erro ao consultar Outlook.');
       if ((error instanceof Error ? error.message : '').includes('não conectado')) setConnected(false);
@@ -55,6 +69,8 @@ export default function Home() {
     }
   }
 
+
+  useEffect(() => { if (!connected) return; const timer = window.setInterval(() => { void syncEmails(); }, 60000); return () => window.clearInterval(timer); }, [connected]);
 
   async function runAudit() {
     setAuditLoading(true); setMailError(''); setAuditResult(null);
@@ -116,6 +132,11 @@ export default function Home() {
       <section className="mail-panel mail-live"><div className="mail-icon">✉</div><div className="mail-main"><h3>Conexão com Microsoft Outlook</h3><p>Conecte a caixa corporativa para localizar mensagens do Siimp Sistemas e e-mails que mencionem “Danubio”. A consulta é somente leitura.</p><span className="pill">Siimp Sistemas</span> <span className="pill">Palavra-chave: Danubio</span> <span className="pill">Somente leitura</span>
         {mailError && <div className="mail-error">{mailError}</div>}
         {connected && <div className="mail-success">Conta conectada. {mailCount === null ? '' : `${mailCount} mensagem(ns) localizada(s).`}</div>}
+        <div className="daily-review">
+          <div className="daily-review-head"><div><h3>Conferência humana do dia</h3><p>Informe o nome do responsável somente depois de revisar as auditorias e pendências.</p></div><span className={dailyConfirmation?.status === 'confirmed' ? 'daily-state done' : 'daily-state'}>{dailyConfirmation?.status === 'confirmed' ? 'Confirmado' : 'Pendente'}</span></div>
+          {dailyConfirmation?.status === 'confirmed' ? <div className="mail-success">Conferido por <b>{dailyConfirmation.confirmed_by}</b> em {new Date(dailyConfirmation.confirmed_at).toLocaleString('pt-BR')}.</div> : <><label className="daily-label">Nome do responsável</label><input className="daily-input" value={responsibleName} onChange={e=>setResponsibleName(e.target.value)} placeholder="Digite o nome completo" maxLength={100}/><button className="daily-confirm" onClick={()=>void confirmDailyAudit()} disabled={!connected || confirmationLoading || responsibleName.trim().length < 3}>{confirmationLoading ? 'Registrando confirmação...' : 'Confirmar auditoria do dia'}</button>{confirmationError && <div className="mail-error">{confirmationError}</div>}</>}
+          <small className="daily-foot">A confirmação registra o responsável e o horário. Novos e-mails exigem nova conferência.</small>
+        </div>
         <div className="mail-actions">{!connected && <button onClick={()=>window.location.href='/api/outlook/connect'}>Conectar Microsoft Outlook</button>}<button className="light" onClick={()=>void syncEmails()} disabled={mailLoading}>{mailLoading ? 'Consultando mensagens...' : connected ? 'Atualizar e-mails' : 'Testar conexão'}</button><button onClick={()=>void runAudit()} disabled={!connected || auditLoading}>{auditLoading ? 'Auditando e-mails...' : auditResult?.hasMore ? 'Continuar varredura' : 'Auditar e-mails e CT-e'}</button></div>{(auditLoading || auditResult) && <div className="mail-list" style={{marginTop:16}}>
           <h4>{auditLoading ? 'Auditoria em andamento' : 'Progresso da auditoria'}</h4>
           <div style={{height:10,background:'#e5e7eb',borderRadius:20,overflow:'hidden',margin:'10px 0'}}>
@@ -134,7 +155,7 @@ export default function Home() {
           {item.reference != null && <div>Referência: {brl(item.reference)} · Diferença: {brl(item.discrepancy ?? 0)}</div>}
         </div>)}</div>}
         {auditResult?.results?.length > 0 && <div className="mail-list"><h4>CT-e processados</h4>{auditResult.results.map((item:any,i:number)=><article className="mail-item" key={i}><div><b>{item.file || item.email}</b><small>{item.reason}</small>{item.invoiceValue != null && <small>NF: {brl(item.invoiceValue)} · Peso: {item.weightKg ?? 'Não identificado'} kg · Tomador: {item.tomadorCnpj || 'Não identificado'}</small>}</div><div className="mail-meta"><span className="pill">{item.status}</span>{item.freightGross !== undefined && <small>Frete total: {brl(item.freightGross)} · ICMS: {brl(item.icms ?? 0)} · Frete sem ICMS: {brl(item.freight)}</small>}</div></article>)}</div>}
-        {emails.length > 0 && <div className="mail-list"><h4>Mensagens encontradas</h4>{emails.map(mail=><article key={mail.id} className="mail-item"><div><b>{mail.subject}</b><small>{mail.sender} · {new Date(mail.receivedAt).toLocaleString('pt-BR')}</small><p>{mail.preview}</p></div><div className="mail-meta">{mail.hasAttachments && <span className="pill">Com anexo</span>}{mail.webLink && <a href={mail.webLink} target="_blank" rel="noreferrer">Abrir e-mail</a>}</div></article>)}</div>}
+        {emails.length > 0 && <div className="mail-list"><h4>Novos e-mails recebidos · atualização automática a cada minuto</h4>{emails.map(mail=><article key={mail.id} className="mail-item"><div><b>{mail.subject}</b><small>{mail.sender} · {new Date(mail.receivedAt).toLocaleString('pt-BR')}</small><p>{mail.preview}</p></div><div className="mail-meta">{mail.hasAttachments && <span className="pill">Com anexo</span>}{mail.webLink && <a href={mail.webLink} target="_blank" rel="noreferrer">Abrir e-mail</a>}</div></article>)}</div>}
       </div><span className={connected ? 'not-connected connected' : 'not-connected'}>{connected ? 'Conectado' : 'Aguardando conexão'}</span></section>
       <footer>ALEX FREIGHT AUDIT · Relatórios de divergência sujeitos à revisão humana.</footer>
     </section>
