@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
               }),
             });
             auditsCreated++;
-            results.push({ file: attachment.name, status: audit.status, reason: audit.reason, freight: extracted.freightNet, reference: audit.reference });
+            results.push({ file: attachment.name, status: audit.status, reason: audit.reason, freight: extracted.freightNet, freightGross: extracted.freightGross, icms: extracted.icmsValue, reference: audit.reference });
           } catch (e) {
             errors++;
             await db("freight_attachments?id=eq." + attachmentRowId, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ processing_status: "error" }) });
