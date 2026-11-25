@@ -111,12 +111,14 @@ export function evaluateFreight(data: ExtractedCte) {
   if (data.tomadorCnpj !== "39860057000104") {
     return { status: "out_of_scope", reference: null, discrepancy: null, reason: "Tomador diferente da Brasil Engrenagens." };
   }
-  if (data.invoiceValue === null || data.weightKg === null || data.freightNet === null || data.errors.length) {
+  if (data.invoiceValue === null || data.weightKg === null || data.freightGross === null || data.errors.length) {
     return { status: "needs_review", reference: null, discrepancy: null, reason: data.errors.join("; ") || "Dados insuficientes para auditoria." };
   }
   const reference = Math.round(Math.max(100, data.weightKg * 0.7, data.invoiceValue * 0.015) * 100) / 100;
-  if (data.freightNet <= 100) return { status: "accepted", reference, discrepancy: 0, reason: "Frete de até R$ 100,00 aceito pela regra contratual." };
-  const discrepancy = Math.round(Math.abs(data.freightNet - reference) * 100) / 100;
-  if (discrepancy >= 0.01) return { status: "divergent", reference, discrepancy, reason: data.freightNet > reference ? "Frete acima da referência calculada." : "Frete abaixo da referência calculada." };
-  return { status: "accepted", reference, discrepancy: 0, reason: "Frete confere com a referência calculada." };
+  // A referência comercial corresponde ao frete total do CT-e. O ICMS é
+  // exibido separadamente, mas não deve ser subtraído antes da comparação.
+  if (data.freightGross <= 100) return { status: "accepted", reference, discrepancy: 0, reason: "Frete total de até R$ 100,00 aceito pela regra contratual." };
+  const discrepancy = Math.round(Math.abs(data.freightGross - reference) * 100) / 100;
+  if (discrepancy >= 0.01) return { status: "divergent", reference, discrepancy, reason: data.freightGross > reference ? "Frete total acima da referência calculada." : "Frete total abaixo da referência calculada." };
+  return { status: "accepted", reference, discrepancy: 0, reason: "Frete total confere com a referência calculada." };
 }
