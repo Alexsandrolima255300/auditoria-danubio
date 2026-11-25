@@ -73,7 +73,7 @@ export default function Home() {
 
   useEffect(() => { if (!connected) return; const timer = window.setInterval(() => { void syncEmails(); }, 60000); return () => window.clearInterval(timer); }, [connected]);
 
-  async function runAudit() {
+  async function runAudit(reprocessProcessed = false) {
     setAuditLoading(true); setMailError(''); setAuditResult(null);
     setAuditProgress({ processed: 0, percent: 0, running: true });
     let cursor = { ...auditCursor };
@@ -85,7 +85,7 @@ export default function Home() {
       for (let batch = 0; batch < 500; batch++) {
         const response = await fetch('/api/outlook/audit', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(cursor), cache: 'no-store'
+          body: JSON.stringify({ ...cursor, reprocessProcessed }), cache: 'no-store'
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Falha ao auditar e-mails.');
@@ -143,7 +143,7 @@ export default function Home() {
           {dailyConfirmation?.status === 'confirmed' ? <div className="mail-success">Conferido por <b>{dailyConfirmation.confirmed_by}</b> em {new Date(dailyConfirmation.confirmed_at).toLocaleString('pt-BR')}.</div> : <><label className="daily-label">Nome do responsável</label><input className="daily-input" value={responsibleName} onChange={e=>setResponsibleName(e.target.value)} placeholder="Digite o nome completo" maxLength={100}/><button className="daily-confirm" onClick={()=>void confirmDailyAudit()} disabled={!connected || confirmationLoading || responsibleName.trim().length < 3}>{confirmationLoading ? 'Registrando confirmação...' : 'Confirmar auditoria do dia'}</button>{confirmationError && <div className="mail-error">{confirmationError}</div>}</>}
           <small className="daily-foot">A confirmação registra o responsável e o horário. Novos e-mails exigem nova conferência.</small>
         </div>
-        <div className="mail-actions">{!connected && <button onClick={()=>window.location.href='/api/outlook/connect'}>Conectar Microsoft Outlook</button>}<button className="light" onClick={()=>void syncEmails()} disabled={mailLoading}>{mailLoading ? 'Consultando mensagens...' : connected ? 'Atualizar e-mails' : 'Testar conexão'}</button><button onClick={()=>void runAudit()} disabled={!connected || auditLoading}>{auditLoading ? 'Auditando e-mails...' : auditResult?.hasMore ? 'Continuar varredura' : 'Auditar e-mails e CT-e'}</button></div>{(auditLoading || auditResult) && <div className="mail-list" style={{marginTop:16}}>
+        <div className="mail-actions">{!connected && <button onClick={()=>window.location.href='/api/outlook/connect'}>Conectar Microsoft Outlook</button>}<button className="light" onClick={()=>void syncEmails()} disabled={mailLoading}>{mailLoading ? 'Consultando mensagens...' : connected ? 'Atualizar e-mails' : 'Testar conexão'}</button><button onClick={()=>void runAudit()} disabled={!connected || auditLoading}>{auditLoading ? 'Auditando e-mails...' : auditResult?.hasMore ? 'Continuar varredura' : 'Auditar e-mails e CT-e'}</button><button className="light" onClick={()=>{ if(window.confirm('Isso vai baixar e ler novamente os PDFs já processados. Deseja continuar?')) void runAudit(true); }} disabled={!connected || auditLoading}>Reprocessar PDFs já lidos</button></div>{(auditLoading || auditResult) && <div className="mail-list" style={{marginTop:16}}>
           <h4>{auditLoading ? 'Auditoria em andamento' : 'Progresso da auditoria'}</h4>
           <div style={{height:10,background:'#e5e7eb',borderRadius:20,overflow:'hidden',margin:'10px 0'}}>
             <div style={{height:'100%',width:auditProgress.percent+'%',background:'#2563eb',transition:'width .25s ease'}} />
