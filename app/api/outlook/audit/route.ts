@@ -45,7 +45,7 @@ async function searchAll(accessToken: string, term: string, maxMessages: number,
     next = data["@odata.nextLink"] || null;
     pages++;
   }
-  return { items: items.slice(0, maxMessages), hasMore: Boolean(next) };
+  return { items: items.slice(0, maxMessages), hasMore: Boolean(next), nextLink: next };
 }
 function isPdf(a: any) {
   return (a.contentType || "").toLowerCase().includes("pdf") || (a.name || "").toLowerCase().endsWith(".pdf");
