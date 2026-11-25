@@ -319,6 +319,19 @@ export default function Home() {
         {!invoiceLoading && invoiceData.length === 0 && <div className="empty-state"><span>▧</span><b>Nenhuma fatura processada</b><p>Use “Buscar e conferir faturas no Outlook”. O sistema procura PDFs de fatura da Danúbio nos e-mails ainda dentro dos 20 dias.</p></div>}
         <div className="record-list">{invoiceData.map((invoice:any) => {
           const items=invoice.items||[]; const meta=invoice.extraction_data||{}; const counts=meta.statuses||{}; const expanded=selectedInvoiceId===invoice.id;
+          const reportItems=items.filter((item:any)=>item.comparison_status!=='matched');
+          const matchedItems=items.filter((item:any)=>item.comparison_status==='matched');
+          const sumField=(rows:any[],field:string)=>rows.reduce((sum:number,item:any)=>sum+(Number(item[field])||0),0);
+          const reportCharged=sumField(items,'charged_total');
+          const reportOriginal=sumField(items.filter((item:any)=>item.original_freight_total!=null),'original_freight_total');
+          const reportAbove=sumField(items.filter((item:any)=>Number(item.value_difference)>0),'value_difference');
+          const reportBelow=Math.abs(sumField(items.filter((item:any)=>Number(item.value_difference)<0),'value_difference'));
+          const reportWeight=sumField(items,'weight_difference');
+          const reportValueDifference=sumField(items.filter((item:any)=>item.value_difference!=null),'value_difference');
+          const reportNotFound=items.filter((item:any)=>item.comparison_status==='not_found').length;
+          const reportDuplicate=items.filter((item:any)=>item.comparison_status==='duplicate').length;
+          const reportWeightCount=items.filter((item:any)=>['weight_difference','both_different'].includes(item.comparison_status)).length;
+          const reportValueCount=items.filter((item:any)=>['value_difference','both_different'].includes(item.comparison_status)).length;
           const label=(s:string)=>({matched:'Confere',weight_difference:'Peso divergente',value_difference:'Valor divergente',both_different:'Peso e valor divergentes',not_found:'CT-e não localizado',duplicate:'CT-e duplicado',needs_review:'Revisar'} as Record<string,string>)[s]||s;
           return <article className="record-card" key={invoice.id}>
             <button className="invoice-card-toggle" onClick={()=>setSelectedInvoiceId(expanded?null:invoice.id)}>
@@ -327,6 +340,34 @@ export default function Home() {
               <div className="invoice-expand-label">{expanded?'Ocultar documentos ▲':'Ver conferência dos CT-es ▼'}</div>
             </button>
             {expanded && <div className="invoice-items-wrap">
+              <section className="invoice-report">
+                <div className="invoice-report-heading">
+                  <div><span className="invoice-report-kicker">RELATÓRIO AUTOMÁTICO DE AUDITORIA</span><h3>Relatório de divergências · Fatura {invoice.invoice_number||'não identificada'}</h3><p>Gerado após a leitura do PDF e a comparação com os CT-es originais.</p></div>
+                  <button className="invoice-report-print" onClick={()=>window.print()}>Imprimir / salvar PDF</button>
+                </div>
+                <div className="invoice-report-stats">
+                  <div><small>CT-es conferidos</small><strong>{items.length}</strong></div>
+                  <div><small>Sem divergência</small><strong>{matchedItems.length}</strong></div>
+                  <div><small>Com divergência</small><strong>{reportItems.length}</strong></div>
+                  <div><small>Não localizados</small><strong>{reportNotFound}</strong></div>
+                </div>
+                <div className="invoice-report-financial">
+                  <div><span>Total cobrado na fatura (itens lidos)</span><b>{brl(reportCharged)}</b></div>
+                  <div><span>Total original dos CT-es localizados</span><b>{brl(reportOriginal)}</b></div>
+                  <div><span>Cobrança acima do CT-e original</span><b>{brl(reportAbove)}</b></div>
+                  <div><span>Cobrança abaixo do CT-e original</span><b>{brl(reportBelow)}</b></div>
+                  <div><span>Diferença líquida dos valores comparáveis</span><b>{brl(reportValueDifference)}</b></div>
+                  <div><span>Diferença líquida de peso</span><b>{reportWeight.toLocaleString('pt-BR',{maximumFractionDigits:3})} kg</b></div>
+                </div>
+                <div className="invoice-report-notes">
+                  <span>{reportWeightCount} CT-e(s) com divergência de peso</span>
+                  <span>{reportValueCount} CT-e(s) com divergência de valor</span>
+                  <span>{reportDuplicate} CT-e(s) duplicado(s)</span>
+                </div>
+                <h4>Ocorrências que exigem análise</h4>
+                {reportItems.length ? <div className="invoice-table-scroll"><table className="invoice-table"><thead><tr><th>CT-e</th><th>NF</th><th>Situação</th><th>Peso fatura</th><th>Peso CT-e</th><th>Dif. peso</th><th>Valor fatura</th><th>Valor CT-e</th><th>Dif. valor</th></tr></thead><tbody>{reportItems.map((item:any)=><tr key={'report-'+item.id}><td>{item.cte_number||'—'}</td><td>{item.invoice_number||'—'}</td><td>{label(item.comparison_status)}</td><td>{item.weight_kg!=null?Number(item.weight_kg).toLocaleString('pt-BR')+' kg':'—'}</td><td>{item.original_weight_kg!=null?Number(item.original_weight_kg).toLocaleString('pt-BR')+' kg':'Não localizado'}</td><td>{item.weight_difference!=null?Number(item.weight_difference).toLocaleString('pt-BR')+' kg':'—'}</td><td>{brl(item.charged_total)}</td><td>{brl(item.original_freight_total)}</td><td>{item.value_difference!=null?brl(item.value_difference):'—'}</td></tr>)}</tbody></table></div> : <div className="invoice-report-clear">Nenhuma divergência encontrada nos CT-es comparados.</div>}
+                <p className="invoice-report-footnote">Critério: valores comparados pelo frete total incluindo ICMS; tolerância de R$ 0,01. Pesos são comparados com o peso extraído do CT-e original. Itens não localizados ou duplicados precisam de conferência humana. Totais originais consideram somente CT-es localizados; diferenças financeiras consideram somente itens com comparação disponível.</p>
+              </section>
               <div className="invoice-totals"><b>Fechamento dos itens extraídos</b><span>Quantidade: {meta.totalsCheck?.countItems??items.length} / {invoice.document_count??'—'}</span><span>Peso somado: {meta.totalsCheck?.weightItems!=null?Number(meta.totalsCheck.weightItems).toLocaleString('pt-BR')+' kg':'—'}</span><span>Soma dos fretes: {brl(meta.totalsCheck?.sumItems)}</span></div>
               <div className="invoice-table-scroll"><table className="invoice-table"><thead><tr><th>CT-e</th><th>NF</th><th>Peso fatura</th><th>Peso CT-e</th><th>Dif. peso</th><th>Valor fatura</th><th>Valor CT-e</th><th>Situação</th></tr></thead><tbody>{items.map((item:any)=><tr key={item.id}><td>{item.cte_number||'—'}</td><td>{item.invoice_number||'—'}</td><td>{item.weight_kg!=null?Number(item.weight_kg).toLocaleString('pt-BR')+' kg':'—'}</td><td>{item.original_weight_kg!=null?Number(item.original_weight_kg).toLocaleString('pt-BR')+' kg':'Não localizado'}</td><td>{item.weight_difference!=null?Number(item.weight_difference).toLocaleString('pt-BR')+' kg':'—'}</td><td>{brl(item.charged_total)}</td><td>{brl(item.original_freight_total)}</td><td><span className={'record-status '+(item.comparison_status==='matched'?'accepted':'needs_review')}>{label(item.comparison_status)}</span></td></tr>)}</tbody></table></div>
             </div>}
