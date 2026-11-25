@@ -60,7 +60,8 @@ export default function Home() {
       if (!response.ok) throw new Error(data.error || 'Não foi possível consultar os e-mails.');
       setConnected(true);
       setEmails(data.emails || []);
-      setMailCount(data.count ?? 0);\n      await loadDailyConfirmation();
+      setMailCount(data.count ?? 0);
+      await loadDailyConfirmation();
     } catch (error) {
       setMailError(error instanceof Error ? error.message : 'Erro ao consultar Outlook.');
       if ((error instanceof Error ? error.message : '').includes('não conectado')) setConnected(false);
