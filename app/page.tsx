@@ -14,7 +14,7 @@ const textField = (text: string, pattern: RegExp) => {
 };
 const statusLabel = (status?: string) => (({ accepted: 'Aceito', divergent: 'Divergência', needs_review: 'Revisão necessária', out_of_scope: 'Fora do escopo', pending: 'Pendente', extracted: 'Extraído', error: 'Erro na leitura', discovered: 'Localizado', attachments_checked: 'Anexos conferidos' } as Record<string, string>)[status || ''] || status || 'Não informado');
 
-type Section = 'overview' | 'documents' | 'divergences' | 'newEmails' | 'emails';
+type Section = 'overview' | 'documents' | 'divergences' | 'newEmails' | 'emails' | 'search';
 type Mail = { id: string; subject: string; sender: string; senderEmail: string; receivedAt: string; hasAttachments: boolean; preview: string; webLink: string };
 type AuditData = { mailbox?: string; emails: any[]; documents: any[]; divergences: any[]; totals: { documents: number; divergences: number; errors: number; audited: number } };
 const navigation: { id: Section; label: string; icon: string }[] = [
@@ -23,6 +23,7 @@ const navigation: { id: Section; label: string; icon: string }[] = [
   { id: 'divergences', label: 'Divergências', icon: '⚑' },
   { id: 'newEmails', label: 'Novos e-mails', icon: '✉' },
   { id: 'emails', label: 'E-mails', icon: '▣' },
+  { id: 'search', label: 'Pesquisa', icon: '⌕' },
 ];
 
 export default function Home() {
@@ -36,6 +37,8 @@ export default function Home() {
   const [connected, setConnected] = useState(false);
   const [mailCount, setMailCount] = useState<number | null>(null);
   const [emailFolderState, setEmailFolderState] = useState<Record<string, boolean>>({});
+  const [searchDate, setSearchDate] = useState('');
+  const [searchCte, setSearchCte] = useState('');
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditResult, setAuditResult] = useState<any>(null);
   const [auditProgress, setAuditProgress] = useState({ processed: 0, percent: 0, running: false });
@@ -195,6 +198,7 @@ export default function Home() {
     divergences: { title: 'Divergências', subtitle: 'Revise cobranças divergentes, falhas de leitura e casos pendentes.' },
     newEmails: { title: 'Novos e-mails', subtitle: 'Mensagens recebidas hoje, considerando a virada do dia à meia-noite no horário de Brasília.' },
     emails: { title: 'E-mails', subtitle: 'Gerencie a conexão com Outlook e acompanhe as mensagens sincronizadas.' },
+    search: { title: 'Pesquisa', subtitle: 'Encontre documentos por dia de recebimento ou número do CT-e.' },
   };
 
   function renderDocument(doc: any) {
@@ -207,7 +211,7 @@ export default function Home() {
         <span className={'record-status ' + (audit.audit_status || doc.processing_status || 'pending')}>{statusLabel(audit.audit_status || doc.processing_status)}</span>
       </div>
       <div className="record-grid">
-        <span>Tomador<strong>{audit.tomador_cnpj || 'Não identificado'}</strong></span>
+        <span>Número do CT-e<strong>{cteNumber}</strong></span>\n        <span>Tomador<strong>{audit.tomador_cnpj || 'Não identificado'}</strong></span>
         <span>Valor da NF<strong>{brl(audit.invoice_value)}</strong></span>
         <span>Peso<strong>{audit.weight_kg != null ? String(audit.weight_kg) + ' kg' : 'Não identificado'}</strong></span>
         <span>Frete total<strong>{brl(freight)}</strong></span>
@@ -257,6 +261,31 @@ export default function Home() {
         {dataLoading && <p className="subtle-message">Atualizando indicadores...</p>}
         {dataError && <div className="mail-error">{dataError}</div>}
       </>}
+
+      {activeSection === 'search' && (() => {
+        const normalizedCte = searchCte.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const results = documents.filter((doc: any) => {
+          const receivedAt = doc.email?.received_at;
+          const day = receivedAt ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(receivedAt)) : '';
+          const rawText = String(doc.audit?.extracted_fields?.extractedTextSample || '');
+          const cte = textField(rawText, /CTE Nº DOCUMENTO:\\s*([^\\s]+)/i);
+          const normalizedDocCte = cte.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const matchesDate = !searchDate || day === searchDate;
+          const matchesCte = !normalizedCte || normalizedDocCte.includes(normalizedCte) || String(doc.file_name || '').toLowerCase().includes(searchCte.trim().toLowerCase());
+          return matchesDate && matchesCte;
+        });
+        return <section className="data-section">
+          <div className="section-toolbar"><div><h2>Localizar CT-e</h2><p>Pesquise nos documentos salvos nos últimos 20 dias.</p></div><button className="refresh-button" onClick={() => void loadAuditData()} disabled={dataLoading}>{dataLoading ? 'Atualizando...' : 'Atualizar dados'}</button></div>
+          <div className="audit-search-fields">
+            <label>Pesquisar por dia de recebimento<input type="date" value={searchDate} onChange={e => setSearchDate(e.target.value)} /></label>
+            <label>Pesquisar por número do CT-e<input value={searchCte} onChange={e => setSearchCte(e.target.value)} placeholder="Digite o número do CT-e" /></label>
+            <button className="search-clear" onClick={() => { setSearchDate(''); setSearchCte(''); }}>Limpar pesquisa</button>
+          </div>
+          <div className="search-results-heading"><b>{results.length} documento(s) encontrado(s)</b><span>Você pode preencher a data, o CT-e ou os dois campos.</span></div>
+          {dataError && <div className="mail-error">{dataError}</div>}
+          {dataLoading && !savedData ? <div className="empty-state">Carregando documentos...</div> : results.length ? <div className="record-list">{results.map(renderDocument)}</div> : <div className="empty-state"><span>⌕</span><b>Nenhum documento encontrado</b><p>Altere a data ou confira o número do CT-e. A pesquisa considera os registros ainda dentro do prazo de retenção.</p></div>}
+        </section>;
+      })()}
 
       {activeSection === 'documents' && <section className="data-section">
         <div className="section-toolbar"><div><h2>Todos os documentos</h2><p>{totals.documents} arquivo(s) registrado(s) · dados salvos no Supabase</p></div><button className="refresh-button" onClick={() => void loadAuditData()} disabled={dataLoading}>{dataLoading ? 'Atualizando...' : 'Atualizar lista'}</button></div>
