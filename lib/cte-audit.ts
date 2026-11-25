@@ -1,4 +1,11 @@
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+
+// Em produção na Vercel, o worker precisa ser resolvido como arquivo local.
+GlobalWorkerOptions.workerSrc = pathToFileURL(
+  join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs")
+).href;
 
 export type ExtractedCte = {
   tomadorName: string | null;
