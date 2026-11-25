@@ -9,19 +9,23 @@ const brl = (n: number | string | null | undefined) => {
 const dateTime = (value?: string | null) => value ? new Date(value).toLocaleString('pt-BR') : 'Data não informada';
 const statusLabel = (status?: string) => (({ accepted: 'Aceito', divergent: 'Divergência', needs_review: 'Revisão necessária', out_of_scope: 'Fora do escopo', pending: 'Pendente', extracted: 'Extraído', error: 'Erro na leitura', discovered: 'Localizado', attachments_checked: 'Anexos conferidos' } as Record<string, string>)[status || ''] || status || 'Não informado');
 
-type Section = 'overview' | 'documents' | 'divergences' | 'emails';
+type Section = 'overview' | 'documents' | 'divergences' | 'newEmails' | 'emails';
 type Mail = { id: string; subject: string; sender: string; senderEmail: string; receivedAt: string; hasAttachments: boolean; preview: string; webLink: string };
 type AuditData = { mailbox?: string; emails: any[]; documents: any[]; divergences: any[]; totals: { documents: number; divergences: number; errors: number; audited: number } };
 const navigation: { id: Section; label: string; icon: string }[] = [
   { id: 'overview', label: 'Visão geral', icon: '▦' },
   { id: 'documents', label: 'Documentos', icon: '▤' },
   { id: 'divergences', label: 'Divergências', icon: '⚑' },
-  { id: 'emails', label: 'E-mails', icon: '✉' },
+  { id: 'newEmails', label: 'Novos e-mails', icon: '✉' },
+  { id: 'emails', label: 'E-mails', icon: '▣' },
 ];
 
 export default function Home() {
   const [activeSection, setActiveSection] = useState<Section>('overview');
   const [emails, setEmails] = useState<Mail[]>([]);
+  const [todayEmails, setTodayEmails] = useState<Mail[]>([]);
+  const [todayEmailCount, setTodayEmailCount] = useState(0);
+  const [brazilDate, setBrazilDate] = useState('');
   const [mailLoading, setMailLoading] = useState(false);
   const [mailError, setMailError] = useState('');
   const [connected, setConnected] = useState(false);
@@ -69,6 +73,9 @@ export default function Home() {
       if (!response.ok) throw new Error(data.error || 'Não foi possível consultar os e-mails.');
       setConnected(true);
       setEmails(data.emails || []);
+      setTodayEmails(data.todayEmails || []);
+      setTodayEmailCount(data.todayCount ?? 0);
+      setBrazilDate(data.brazilDate || '');
       setMailCount(data.count ?? 0);
       await Promise.all([loadDailyConfirmation(), loadAuditData()]);
     } catch (error) {
@@ -154,6 +161,7 @@ export default function Home() {
     overview: { title: 'Auditoria de fretes', subtitle: 'Acompanhe a operação e a situação das cobranças da Danúbio.' },
     documents: { title: 'Documentos', subtitle: 'Consulte os CT-es e arquivos localizados nas mensagens sincronizadas.' },
     divergences: { title: 'Divergências', subtitle: 'Revise cobranças divergentes, falhas de leitura e casos pendentes.' },
+    newEmails: { title: 'Novos e-mails', subtitle: 'Mensagens recebidas hoje, considerando a virada do dia à meia-noite no horário de Brasília.' },
     emails: { title: 'E-mails', subtitle: 'Gerencie a conexão com Outlook e acompanhe as mensagens sincronizadas.' },
   };
 
@@ -187,6 +195,7 @@ export default function Home() {
         {navigation.map(item => <button key={item.id} className={'menu-item ' + (activeSection === item.id ? 'selected' : '')} onClick={() => setActiveSection(item.id)}>
           <span className="menu-icon">{item.icon}</span>{item.label}
           {item.id === 'divergences' && totals.divergences > 0 && <span className="menu-count">{totals.divergences}</span>}
+          {item.id === 'newEmails' && todayEmailCount > 0 && <span className="menu-count">{todayEmailCount}</span>}
         </button>)}
       </nav>
       <div className="side-note">Auditoria Danúbio<br />Revisão humana antes de contestar</div>
@@ -227,6 +236,12 @@ export default function Home() {
         <div className="section-toolbar"><div><h2>Itens que exigem atenção</h2><p>{divergences.length} ocorrência(s) · contestação exige revisão humana</p></div><button className="refresh-button" onClick={() => void loadAuditData()} disabled={dataLoading}>{dataLoading ? 'Atualizando...' : 'Atualizar lista'}</button></div>
         {dataError && <div className="mail-error">{dataError}</div>}
         {divergences.length ? <div className="record-list">{divergences.map(renderDocument)}</div> : <div className="empty-state success-empty"><span>✓</span><b>Nenhuma divergência registrada</b><p>Não há divergências, erros de leitura ou revisões pendentes nos documentos salvos.</p></div>}
+      </section>}
+
+      {activeSection === 'newEmails' && <section className="data-section">
+        <div className="section-toolbar"><div><h2>Recebidos hoje</h2><p>{brazilDate ? new Date(brazilDate + 'T12:00:00-03:00').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'Data de Brasília'} · {todayEmailCount} novo(s) e-mail(s)</p></div><button className="refresh-button" onClick={() => void syncEmails()} disabled={mailLoading}>{mailLoading ? 'Atualizando...' : 'Atualizar lista'}</button></div>
+        <div className="mail-success">A contagem considera o horário de Brasília (UTC−3). À meia-noite, a lista começa um novo dia automaticamente. O histórico de e-mails permanece salvo.</div>
+        {!connected ? <div className="empty-state">Conecte o Outlook para consultar os novos e-mails.</div> : todayEmails.length ? <div className="mail-list">{todayEmails.map(mail => <article key={mail.id} className="mail-item"><div><b>{mail.subject}</b><small>{mail.sender} · {dateTime(mail.receivedAt)}</small><p>{mail.preview}</p></div><div className="mail-meta">{mail.hasAttachments && <span className="pill">Com anexo</span>}</div></article>)}</div> : <div className="empty-state"><span>✉</span><b>Nenhum novo e-mail hoje</b><p>Quando uma mensagem chegar, ela aparecerá aqui. A contagem será reiniciada na próxima meia-noite de Brasília.</p></div>}
       </section>}
 
       {activeSection === 'emails' && <section className="mail-panel mail-live">
