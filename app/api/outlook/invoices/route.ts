@@ -81,7 +81,7 @@ export async function POST(req:NextRequest){
     const connections=await db("outlook_connections?select=id,encrypted_token_cache&revoked_at=is.null&order=last_refreshed_at.desc&limit=1");
     if(!connections.length)throw new Error("Conexão Outlook não encontrada.");
     const connection=connections[0];const refresh=openToken(cookie);const tokens=await refreshMicrosoftToken(refresh);
-    const cutoff=new Date(Date.now()-20*86400000).toISOString();
+    const cutoff=new Date(Date.now()-45*86400000).toISOString();
     const mails=await db("email_messages?select=id,graph_message_id,subject,received_at&connection_id=eq."+connection.id+"&received_at=gte."+encodeURIComponent(cutoff)+"&order=received_at.desc&limit=1000");
     const offset = Math.max(0, Number(req.nextUrl.searchParams.get("offset") || 0));
     const batchSize = Math.min(10, Math.max(1, Number(req.nextUrl.searchParams.get("batch") || 5)));
@@ -102,9 +102,13 @@ export async function POST(req:NextRequest){
         if(!parsed.invoiceNo&&!parsed.items.length)continue;
         const invoiceRows=await db("danubio_invoices?on_conflict=connection_id,graph_attachment_id",{
           method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=representation"},
-          body:JSON.stringify({connection_id:connection.id,email_message_id:mail.id,graph_attachment_id:a.id,file_name:a.name||"fatura.pdf",invoice_number:parsed.invoiceNo,issued_at:parsed.issued,due_at:parsed.due,document_count:parsed.docCount,total_weight:parsed.totalWeight,total_services:parsed.totalServices,total_icms:parsed.totalIcms,total_invoice:parsed.total,processing_status:"needs_review",extraction_data:{parserVersion:3,pages:parsed.pages,textLength:parsed.textLength}})
+          body:JSON.stringify({connection_id:connection.id,email_message_id:mail.id,graph_attachment_id:a.id,file_name:a.name||"fatura.pdf",invoice_number:parsed.invoiceNo,issued_at:parsed.issued,due_at:parsed.due,document_count:parsed.docCount,total_weight:parsed.totalWeight,total_services:parsed.totalServices,total_icms:parsed.totalIcms,total_invoice:parsed.total,processing_status:"needs_review",extraction_data:{parserVersion:4,pages:parsed.pages,textLength:parsed.textLength,periodStart,periodEnd,periodSource:itemDates.length?"invoice_item_issue_dates":"not_identified"}})
         });
         const invoiceId=invoiceRows[0].id;
+        const itemDates=parsed.items.map((x:any)=>x.issued_at).filter(Boolean).sort();
+        const periodStart=itemDates[0]||null;
+        const periodEnd=itemDates[itemDates.length-1]||null;
+        await db("danubio_invoices?id=eq."+invoiceId,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({period_start:periodStart,period_end:periodEnd})});
         await db("danubio_invoice_items?invoice_id=eq."+invoiceId,{method:"DELETE"});
         const cteDocs=await db("freight_audits?select=id,attachment_id,weight_kg,extracted_fields,freight_charge&limit=5000");
         const attIds=[...new Set(cteDocs.map((x:any)=>x.attachment_id))];
@@ -119,12 +123,14 @@ export async function POST(req:NextRequest){
           const raw=String(x.extracted_fields?.extractedTextSample||"");
           const header=raw.match(/CTE\s*N[º°]?\s*DOCUMENTO:\s*(\d+)\s+S[ÉE]RIE:\s*(\d+)/i);
           const cte=header?header[2]+"/"+header[1]:(raw.match(/CTE\s*(?:N[º°]|NUMERO)?\s*[:.]?\s*(\d+\/\d+)/i)?.[1]||null);
-          if(cte)source.push({...x,cte});
+          const issuedMatch=raw.match(/DATA\/?HORA\s+EMISS[AÃ]O\s+(\d{2}\/\d{2}\/\d{4})/i);
+          const sourceIssued=issuedMatch?date(issuedMatch[1]):null;
+          if(cte&&sourceIssued)source.push({...x,cte,sourceIssued});
         }
         const payload:any[]=[];
         const seen=new Set<string>();
         for(const item of parsed.items){
-          const matches=source.filter((x:any)=>normCte(x.cte)===normCte(item.cte_number));
+          const matches=source.filter((x:any)=>normCte(x.cte)===normCte(item.cte_number)&&(!item.issued_at||x.sourceIssued===item.issued_at)&&(!periodStart||x.sourceIssued>=periodStart)&&(!periodEnd||x.sourceIssued<=periodEnd));
           const original=matches[0]||null;
           const weightDiff=original&&original.weight_kg!=null&&item.weight_kg!=null?Math.round((item.weight_kg-Number(original.weight_kg))*1000)/1000:null;
           const originalTotal=original?(original.extracted_fields?.grossFreight??original.freight_charge):null;
