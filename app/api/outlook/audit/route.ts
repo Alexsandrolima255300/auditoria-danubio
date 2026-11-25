@@ -55,6 +55,7 @@ function isCteCandidate(a: any) {
 }
 
 export async function POST(request: NextRequest) {
+  const payload = await request.json().catch(() => ({} as any));
   const encryptedRefresh = request.cookies.get("outlook_refresh")?.value;
   if (!encryptedRefresh) return NextResponse.json({ error: "Outlook ainda não conectado." }, { status: 401 });
   try {
