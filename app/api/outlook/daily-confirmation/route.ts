@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { openToken, refreshMicrosoftToken } from "../../../../lib/microsoft";
+import { openToken } from "../../../../lib/microsoft";
 
 export const dynamic = "force-dynamic";
 const PROJECT_URL = process.env.SUPABASE_URL || "https://shzyfxkjsssjpmesvhxu.supabase.co";
@@ -21,7 +21,7 @@ async function authorized(request: NextRequest) {
   const cookie = request.cookies.get("outlook_refresh")?.value;
   if (!cookie) return false;
   const token = openToken(cookie);
-  await refreshMicrosoftToken(token);
+  if (!token) return false;
   return true;
 }
 export async function GET(request: NextRequest) {
