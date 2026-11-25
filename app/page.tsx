@@ -59,7 +59,8 @@ export default function Home() {
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [invoiceProgress, setInvoiceProgress] = useState({ processed: 0, total: 0, percent: 0 });
   const [invoiceError, setInvoiceError] = useState('');
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+    const [invoiceFoldersOpen, setInvoiceFoldersOpen] = useState<Record<string, boolean>>({});
+const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [selectedInvoiceDiscrepancy, setSelectedInvoiceDiscrepancy] = useState<any>(null);
 
   const loadAuditData = useCallback(async () => {
@@ -318,7 +319,32 @@ export default function Home() {
         {!connected && <div className="alert warning">Conecte o Outlook na aba E-mails para localizar as faturas.</div>}
         {invoiceLoading && <div className="empty-state">Lendo PDFs das faturas e comparando os documentos...</div>}
         {!invoiceLoading && invoiceData.length === 0 && <div className="empty-state"><span>▧</span><b>Nenhuma fatura processada</b><p>Use “Buscar e conferir faturas no Outlook”. O sistema procura PDFs de fatura da Danúbio nos e-mails ainda dentro dos 45 dias.</p></div>}
-        <div className="record-list">{invoiceData.map((invoice:any) => {
+        {(() => {
+          const grouped = new Map<string, {key:string; title:string; invoices:any[]}>();
+          for (const invoice of invoiceData) {
+            const start = invoice.period_start || null;
+            const end = invoice.period_end || null;
+            const key = start && end ? start + '__' + end : 'period_unknown';
+            const title = start && end
+              ? new Date(start+'T12:00:00').toLocaleDateString('pt-BR') + ' até ' + new Date(end+'T12:00:00').toLocaleDateString('pt-BR')
+              : 'Período não identificado';
+            if (!grouped.has(key)) grouped.set(key,{key,title,invoices:[]});
+            grouped.get(key)!.invoices.push(invoice);
+          }
+          const folders = [...grouped.values()].sort((a,b) => {
+            if (a.key === 'period_unknown') return 1;
+            if (b.key === 'period_unknown') return -1;
+            return b.key.localeCompare(a.key);
+          });
+          return folders.length ? <div className="invoice-folders-list">{folders.map(folder => {
+            const open = invoiceFoldersOpen[folder.key] !== false;
+            return <section className="invoice-folder" key={folder.key}>
+              <button className="invoice-folder-toggle" onClick={()=>setInvoiceFoldersOpen(current=>({...current,[folder.key]:!open}))} aria-expanded={open}>
+                <span className="invoice-folder-icon">{open?'📂':'📁'}</span>
+                <span className="invoice-folder-name"><b>Faturas · {folder.title}</b><small>{folder.invoices.length} fatura(s) já varrida(s) e salva(s)</small></span>
+                <span className="invoice-folder-chevron">{open?'Recolher ▲':'Abrir ▼'}</span>
+              </button>
+              {open && <div className="record-list invoice-folder-records">{folder.invoices.map((invoice:any) => {
           const items=invoice.items||[]; const meta=invoice.extraction_data||{}; const counts=meta.statuses||{}; const expanded=selectedInvoiceId===invoice.id;
           const reportItems=items.filter((item:any)=>item.comparison_status!=='matched');
           const matchedItems=items.filter((item:any)=>item.comparison_status==='matched');
@@ -374,7 +400,10 @@ export default function Home() {
               <div className="invoice-table-scroll"><table className="invoice-table"><thead><tr><th>CT-e</th><th>NF</th><th>Peso fatura</th><th>Peso CT-e</th><th>Dif. peso</th><th>Valor fatura</th><th>Valor CT-e</th><th>Situação</th></tr></thead><tbody>{items.map((item:any)=><tr key={item.id}><td>{item.cte_number||'—'}</td><td>{item.invoice_number||'—'}</td><td>{item.weight_kg!=null?Number(item.weight_kg).toLocaleString('pt-BR')+' kg':'—'}</td><td>{item.original_weight_kg!=null?Number(item.original_weight_kg).toLocaleString('pt-BR')+' kg':'Não localizado'}</td><td>{item.weight_difference!=null?Number(item.weight_difference).toLocaleString('pt-BR')+' kg':'—'}</td><td>{brl(item.charged_total)}</td><td>{brl(item.original_freight_total)}</td><td><span className={'record-status '+(item.comparison_status==='matched'?'accepted':'needs_review')}>{label(item.comparison_status)}</span></td></tr>)}</tbody></table></div>
             </div>}
           </article>;
-        })}</div>
+        })}</div>}
+            </section>;
+          })}</div> : <div className="empty-state"><span>▧</span><b>Nenhuma fatura processada</b><p>Use “Buscar e conferir faturas no Outlook”. As faturas lidas serão salvas automaticamente em pastas pelo período que consta no PDF, respeitando a retenção de 45 dias.</p></div>;
+        })()}
         {selectedInvoiceDiscrepancy && (() => {
           const { invoice, item } = selectedInvoiceDiscrepancy;
           const statusText = ({matched:'Confere',weight_difference:'Peso divergente',value_difference:'Valor divergente',both_different:'Peso e valor divergentes',not_found:'CT-e não localizado',duplicate:'CT-e duplicado',needs_review:'Revisar'} as Record<string,string>)[item.comparison_status] || item.comparison_status || 'Revisar';
