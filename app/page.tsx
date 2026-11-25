@@ -60,6 +60,7 @@ export default function Home() {
   const [invoiceProgress, setInvoiceProgress] = useState({ processed: 0, total: 0, percent: 0 });
   const [invoiceError, setInvoiceError] = useState('');
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [selectedInvoiceDiscrepancy, setSelectedInvoiceDiscrepancy] = useState<any>(null);
 
   const loadAuditData = useCallback(async () => {
     setDataLoading(true);
@@ -366,7 +367,7 @@ export default function Home() {
                   <span>{reportDuplicate} CT-e(s) duplicado(s)</span>
                 </div>
                 <h4>Ocorrências que exigem análise</h4>
-                {reportItems.length ? <div className="invoice-table-scroll"><table className="invoice-table"><thead><tr><th>CT-e</th><th>NF</th><th>Situação</th><th>Peso fatura</th><th>Peso CT-e</th><th>Dif. peso</th><th>Valor fatura</th><th>Valor CT-e</th><th>Dif. valor</th></tr></thead><tbody>{reportItems.map((item:any)=><tr key={'report-'+item.id}><td>{item.cte_number||'—'}</td><td>{item.invoice_number||'—'}</td><td>{label(item.comparison_status)}</td><td>{item.weight_kg!=null?Number(item.weight_kg).toLocaleString('pt-BR')+' kg':'—'}</td><td>{item.original_weight_kg!=null?Number(item.original_weight_kg).toLocaleString('pt-BR')+' kg':'Não localizado'}</td><td>{item.weight_difference!=null?Number(item.weight_difference).toLocaleString('pt-BR')+' kg':'—'}</td><td>{brl(item.charged_total)}</td><td>{brl(item.original_freight_total)}</td><td>{item.value_difference!=null?brl(item.value_difference):'—'}</td></tr>)}</tbody></table></div> : <div className="invoice-report-clear">Nenhuma divergência encontrada nos CT-es comparados.</div>}
+                {reportItems.length ? <div className="invoice-table-scroll"><table className="invoice-table"><thead><tr><th>CT-e</th><th>NF</th><th>Situação</th><th>Peso fatura</th><th>Peso CT-e</th><th>Dif. peso</th><th>Valor fatura</th><th>Valor CT-e</th><th>Dif. valor</th></tr></thead><tbody>{reportItems.map((item:any)=><tr key={'report-'+item.id} className="invoice-discrepancy-row" tabIndex={0} role="button" aria-label={'Ver explicação da divergência do CT-e '+(item.cte_number||'não identificado')} onClick={()=>setSelectedInvoiceDiscrepancy({invoice,item})} onKeyDown={event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();setSelectedInvoiceDiscrepancy({invoice,item});}}}><td>{item.cte_number||'—'}</td><td>{item.invoice_number||'—'}</td><td>{label(item.comparison_status)}</td><td>{item.weight_kg!=null?Number(item.weight_kg).toLocaleString('pt-BR')+' kg':'—'}</td><td>{item.original_weight_kg!=null?Number(item.original_weight_kg).toLocaleString('pt-BR')+' kg':'Não localizado'}</td><td>{item.weight_difference!=null?Number(item.weight_difference).toLocaleString('pt-BR')+' kg':'—'}</td><td>{brl(item.charged_total)}</td><td>{brl(item.original_freight_total)}</td><td>{item.value_difference!=null?brl(item.value_difference):'—'}</td></tr>)}</tbody></table></div> : <div className="invoice-report-clear">Nenhuma divergência encontrada nos CT-es comparados.</div>}
                 <p className="invoice-report-footnote">Critério: valores comparados pelo frete total incluindo ICMS; tolerância de R$ 0,01. Pesos são comparados com o peso extraído do CT-e original. Itens não localizados ou duplicados precisam de conferência humana. Totais originais consideram somente CT-es localizados; diferenças financeiras consideram somente itens com comparação disponível.</p>
               </section>
               <div className="invoice-totals"><b>Fechamento dos itens extraídos</b><span>Quantidade: {meta.totalsCheck?.countItems??items.length} / {invoice.document_count??'—'}</span><span>Peso somado: {meta.totalsCheck?.weightItems!=null?Number(meta.totalsCheck.weightItems).toLocaleString('pt-BR')+' kg':'—'}</span><span>Soma dos fretes: {brl(meta.totalsCheck?.sumItems)}</span></div>
@@ -374,6 +375,55 @@ export default function Home() {
             </div>}
           </article>;
         })}</div>
+        {selectedInvoiceDiscrepancy && (() => {
+          const { invoice, item } = selectedInvoiceDiscrepancy;
+          const statusText = label(item.comparison_status);
+          const charged = Number(item.charged_total);
+          const original = item.original_freight_total == null ? null : Number(item.original_freight_total);
+          const chargedWeight = item.weight_kg == null ? null : Number(item.weight_kg);
+          const originalWeight = item.original_weight_kg == null ? null : Number(item.original_weight_kg);
+          const valueDiff = item.value_difference == null ? null : Number(item.value_difference);
+          const weightDiff = item.weight_difference == null ? null : Number(item.weight_difference);
+          const explanation = item.comparison_status === 'not_found'
+            ? 'O CT-e informado na fatura não foi localizado entre os documentos originais disponíveis no período. É necessário conferir o número do documento e localizar o CT-e antes de validar a cobrança.'
+            : item.comparison_status === 'duplicate'
+              ? 'O mesmo CT-e apareceu mais de uma vez na fatura. Confira se houve duplicidade de lançamento antes de aprovar o pagamento.'
+              : item.comparison_status === 'weight_difference'
+                ? 'O peso informado na fatura é diferente do peso registrado no CT-e original. A diferença precisa ser conferida com o documento de origem.'
+                : item.comparison_status === 'value_difference'
+                  ? 'O valor cobrado na fatura é diferente do valor total registrado no CT-e original. A comparação considera o frete total, incluindo ICMS, com tolerância de R$ 0,01.'
+                  : item.comparison_status === 'both_different'
+                    ? 'Foram encontradas duas diferenças: o peso da fatura não coincide com o CT-e original e o valor cobrado também está diferente. Confira os dois campos antes de contestar.'
+                    : 'Este item foi sinalizado para revisão. Confira os dados extraídos da fatura e o CT-e original antes de concluir a análise.';
+          return <div className="invoice-discrepancy-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setSelectedInvoiceDiscrepancy(null);}}>
+            <section className="invoice-discrepancy-modal" role="dialog" aria-modal="true" aria-labelledby="invoice-discrepancy-title">
+              <div className="invoice-discrepancy-heading">
+                <div><span className="invoice-report-kicker">ANÁLISE DA COBRANÇA</span><h2 id="invoice-discrepancy-title">Divergência · CT-e {item.cte_number||'não identificado'}</h2><p>Fatura nº {invoice.invoice_number||'não identificada'} · {invoice.file_name||'Arquivo não identificado'}</p></div>
+                <button className="invoice-discrepancy-close no-print" onClick={()=>setSelectedInvoiceDiscrepancy(null)} aria-label="Fechar">×</button>
+              </div>
+              <div className="invoice-discrepancy-status"><b>{statusText}</b></div>
+              <p className="invoice-discrepancy-explanation">{explanation}</p>
+              <div className="invoice-discrepancy-values">
+                <div><small>Valor cobrado na fatura</small><strong>{brl(item.charged_total)}</strong></div>
+                <div><small>Valor no CT-e original</small><strong>{brl(item.original_freight_total)}</strong></div>
+                <div><small>Peso na fatura</small><strong>{chargedWeight==null?'Não informado':chargedWeight.toLocaleString('pt-BR')+' kg'}</strong></div>
+                <div><small>Peso no CT-e original</small><strong>{originalWeight==null?'Não localizado':originalWeight.toLocaleString('pt-BR')+' kg'}</strong></div>
+                <div><small>Diferença de valor</small><strong>{valueDiff==null?'Não calculada':brl(valueDiff)}</strong></div>
+                <div><small>Diferença de peso</small><strong>{weightDiff==null?'Não calculada':weightDiff.toLocaleString('pt-BR',{maximumFractionDigits:3})+' kg'}</strong></div>
+              </div>
+              <div className="invoice-discrepancy-guidance">
+                <b>O que precisa ser conferido</b>
+                <p>{original==null?'Localize o CT-e original e confirme se o documento pertence ao período desta fatura.':'Compare os valores e pesos acima com o CT-e original. Se a diferença for confirmada, registre a ocorrência com a Danúbio antes de aprovar o pagamento.'}</p>
+                <small>Período da fatura: {invoice.period_start&&invoice.period_end?new Date(invoice.period_start+'T12:00:00').toLocaleDateString('pt-BR')+' até '+new Date(invoice.period_end+'T12:00:00').toLocaleDateString('pt-BR'):'Não identificado'}.</small>
+              </div>
+              <div className="invoice-discrepancy-actions no-print">
+                <button className="refresh-button" onClick={()=>setSelectedInvoiceDiscrepancy(null)}>Fechar</button>
+                <button onClick={()=>{document.body.classList.add('printing-invoice-discrepancy');const cleanup=()=>{document.body.classList.remove('printing-invoice-discrepancy');window.removeEventListener('afterprint',cleanup);};window.addEventListener('afterprint',cleanup);window.print();}}>Imprimir divergência / salvar PDF</button>
+              </div>
+              <p className="invoice-discrepancy-foot">Relatório gerado automaticamente a partir dos dados extraídos. A ocorrência deve passar por conferência humana antes de qualquer contestação.</p>
+            </section>
+          </div>;
+        })()}
       </section>}
 
       {activeSection === 'search' && (() => {
