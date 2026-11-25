@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     const nextDayStart = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
     const select = "select=graph_message_id,subject,sender_name,sender_email,received_at,has_attachments";
     const [rows, todayRows] = await Promise.all([
-      db("email_messages?" + select + "&connection_id=eq." + encodeURIComponent(connection.id) + "&order=received_at.desc&limit=50"),
+      db("email_messages?" + select + "&connection_id=eq." + encodeURIComponent(connection.id) + "&order=received_at.desc&limit=1000"),
       db("email_messages?" + select + "&connection_id=eq." + encodeURIComponent(connection.id) +
         "&received_at=gte." + encodeURIComponent(dayStart.toISOString()) +
         "&received_at=lt." + encodeURIComponent(nextDayStart.toISOString()) +
