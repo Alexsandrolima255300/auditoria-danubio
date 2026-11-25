@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const brl = (n: number | null | undefined) => typeof n === 'number' && Number.isFinite(n) ? n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'Não informado';
 const onlyDigits = (s: string) => s.replace(/\D/g, '');
 const cents = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
