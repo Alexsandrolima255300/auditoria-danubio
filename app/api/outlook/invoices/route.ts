@@ -72,8 +72,11 @@ export async function POST(req:NextRequest){
     const connection=connections[0];const refresh=openToken(cookie);const tokens=await refreshMicrosoftToken(refresh);
     const cutoff=new Date(Date.now()-20*86400000).toISOString();
     const mails=await db("email_messages?select=id,graph_message_id,subject,received_at&connection_id=eq."+connection.id+"&received_at=gte."+encodeURIComponent(cutoff)+"&order=received_at.desc&limit=1000");
+    const offset = Math.max(0, Number(req.nextUrl.searchParams.get("offset") || 0));
+    const batchSize = Math.min(10, Math.max(1, Number(req.nextUrl.searchParams.get("batch") || 5)));
+    const batchMails = mails.slice(offset, offset + batchSize);
     const invoices:any[]=[];
-    for(const mail of mails){
+    for(const mail of batchMails){
       if(!/fatura|danubio|danúbio/i.test(mail.subject||""))continue;
       const atts=await graph(tokens.access_token,"/me/messages/"+encodeURIComponent(mail.graph_message_id)+"/attachments?$top=50");
       for(const a of atts.value||[]){
@@ -134,6 +137,6 @@ export async function POST(req:NextRequest){
       }
     }
     const saved=await db("danubio_invoices?select=*,items:danubio_invoice_items(*)&connection_id=eq."+connection.id+"&order=created_at.desc&limit=100");
-    return NextResponse.json({ok:true,found:invoices.length,invoices:saved,processedNow:invoices});
+    return NextResponse.json({ok:true,found:invoices.length,invoices:saved,processedNow:invoices,scannedEmails:batchMails.length,totalEmails:mails.length,nextOffset:offset+batchMails.length,hasMore:offset+batchMails.length<mails.length});
   }catch(e){return NextResponse.json({error:e instanceof Error?e.message:"Falha ao conferir faturas."},{status:500});}
 }
