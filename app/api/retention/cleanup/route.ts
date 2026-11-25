@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const cutoff = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString();
+    const cutoff = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
     const response = await fetch(
       PROJECT_URL + "/rest/v1/email_messages?received_at=lt." + encodeURIComponent(cutoff) + "&select=id",
       {
@@ -36,10 +36,10 @@ export async function GET(request: NextRequest) {
     const deletedMessages = body ? JSON.parse(body) : [];
     return NextResponse.json({
       ok: true,
-      retentionDays: 20,
+      retentionDays: 45,
       cutoff,
       deletedEmails: Array.isArray(deletedMessages) ? deletedMessages.length : 0,
-      note: "Anexos, auditorias e revisões vinculados são removidos automaticamente pelo banco em cascata. Os resumos diários são preservados.",
+      note: "Anexos, auditorias e revisões vinculados são removidos automaticamente pelo banco em cascata. Faturas e itens vinculados a e-mails antigos também são removidos; checkpoints e resumos diários são preservados.",
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Falha na limpeza de retenção." }, { status: 500 });
