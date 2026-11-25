@@ -19,6 +19,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const cutoff = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
+    const invoiceResponse = await fetch(
+      PROJECT_URL + "/rest/v1/danubio_invoices?created_at=lt." + encodeURIComponent(cutoff) + "&select=id",
+      { method: "DELETE", headers: { apikey: key, Authorization: "Bearer " + key, Prefer: "return=representation" }, cache: "no-store" }
+    );
+    const invoiceBody = await invoiceResponse.text();
+    if (!invoiceResponse.ok) throw new Error("Supabase faturas: " + invoiceBody.slice(0, 500));
+    const deletedInvoices = invoiceBody ? JSON.parse(invoiceBody) : [];
+
     const response = await fetch(
       PROJECT_URL + "/rest/v1/email_messages?received_at=lt." + encodeURIComponent(cutoff) + "&select=id",
       {
@@ -38,7 +46,7 @@ export async function GET(request: NextRequest) {
       ok: true,
       retentionDays: 45,
       cutoff,
-      deletedEmails: Array.isArray(deletedMessages) ? deletedMessages.length : 0,
+      deletedEmails: Array.isArray(deletedMessages) ? deletedMessages.length : 0,\n      deletedInvoices: Array.isArray(deletedInvoices) ? deletedInvoices.length : 0,
       note: "Anexos, auditorias e revisões vinculados são removidos automaticamente pelo banco em cascata. Faturas e itens vinculados a e-mails antigos também são removidos; checkpoints e resumos diários são preservados.",
     });
   } catch (error) {
