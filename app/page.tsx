@@ -313,7 +313,7 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
         {invoiceLoading && <div className="invoice-progress" role="status" aria-live="polite">
           <div className="invoice-progress-heading"><b>Conferência em andamento</b><strong>{invoiceProgress.percent}%</strong></div>
           <div className="invoice-progress-track"><div className="invoice-progress-fill" style={{ width: invoiceProgress.percent + '%' }} /></div>
-          <div className="invoice-progress-detail"><span>{invoiceProgress.processed} de {invoiceProgress.total} e-mails verificados</span><span>Faltam {Math.max(0, invoiceProgress.total - invoiceProgress.processed)}</span></div>
+          <div className="invoice-progress-detail"><span>{invoiceProgress.processed} de {invoiceProgress.total} e-mails com anexos verificados</span><span>Faltam {Math.max(0, invoiceProgress.total - invoiceProgress.processed)}</span></div>
         </div>}
         {invoiceError && <div className="mail-error">{invoiceError}</div>}
         {!connected && <div className="alert warning">Conecte o Outlook na aba E-mails para localizar as faturas.</div>}
