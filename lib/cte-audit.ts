@@ -119,6 +119,7 @@ export function evaluateFreight(data: ExtractedCte) {
   // exibido separadamente, mas não deve ser subtraído antes da comparação.
   if (data.freightGross <= 100) return { status: "accepted", reference, discrepancy: 0, reason: "Frete total de até R$ 100,00 aceito pela regra contratual." };
   const discrepancy = Math.round(Math.abs(data.freightGross - reference) * 100) / 100;
-  if (discrepancy >= 0.01) return { status: "divergent", reference, discrepancy, reason: data.freightGross > reference ? "Frete total acima da referência calculada." : "Frete total abaixo da referência calculada." };
-  return { status: "accepted", reference, discrepancy: 0, reason: "Frete total confere com a referência calculada." };
+  // Tolerância de R$ 0,01 para diferenças de arredondamento.
+  if (discrepancy > 0.01) return { status: "divergent", reference, discrepancy, reason: data.freightGross > reference ? "Frete total acima da referência calculada." : "Frete total abaixo da referência calculada." };
+  return { status: "accepted", reference, discrepancy: 0, reason: discrepancy > 0 ? "Frete total confere dentro da tolerância de arredondamento de R$ 0,01." : "Frete total confere com a referência calculada." };
 }
