@@ -53,15 +53,35 @@ export async function extractCte(buffer: Buffer): Promise<ExtractedCte> {
     /TOMADOR(?: DO SERVICO| DO SERVIÇO)?\s*[:\n-]+\s*([^\n]{4,100})/i,
     /NOME\s*\/\s*RAZAO SOCIAL[^\n]*\n\s*([^\n]{4,100})/i,
   ]);
-  const cnpjRaw = first(text, [
-    /CNPJ\s*[:\n-]*\s*([\d./-]{14,18})/i,
-    /\b(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})\b/,
+  // Nunca use o primeiro CNPJ do documento: normalmente ele pertence ao emitente.
+  // Para a empresa auditada, confirme o CNPJ exato no texto integral do DACTE.
+  const targetCnpj = "39860057000104";
+  const digitsOnly = text.replace(/\D/g, "");
+  const isTargetCompany = /BRASIL\s+ENGRENAGENS\s+E\s+CORRENTES/i.test(text);
+  let cnpj: string | null = null;
+  if (isTargetCompany && digitsOnly.includes(targetCnpj)) {
+    cnpj = targetCnpj;
+  } else {
+    // Para outros tomadores, só aceite CNPJ próximo ao rótulo TOMADOR.
+    const tomadorIndex = text.search(/TOMADOR(?:\s+DO\s+SERVI[ÇC]O)?/i);
+    if (tomadorIndex >= 0) {
+      const tomadorBlock = text.slice(tomadorIndex, tomadorIndex + 900);
+      const contextualCnpj = first(tomadorBlock, [
+        /CNPJ\s*[:\n-]*\s*([\d./-]{14,18})/i,
+        /\b(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})\b/,
+      ]);
+      cnpj = contextualCnpj ? contextualCnpj.replace(/\D/g, "") : null;
+    }
+  }
+  const invoiceValue = parseMoney(text, [
+    "VALOR TOTAL DAS MERCADORIAS", "VALOR TOTAL DA MERCADORIA",
+    "VALOR DA MERCADORIA", "VALOR DA CARGA", "VALOR TOTAL DA CARGA",
+    "VALOR TOTAL DA NOTA", "VALOR DA NOTA",
   ]);
-  const cnpj = cnpjRaw ? cnpjRaw.replace(/\D/g, "") : null;
-  const invoiceValue = parseMoney(text, ["VALOR DA CARGA", "VALOR DA MERCADORIA", "VALOR TOTAL DAS MERCADORIAS", "VALOR DA NOTA"]);
   const weightRaw = first(text, [
-    /PESO(?: BRUTO| TOTAL)?(?: DA CARGA)?\s*[:\n-]+\s*([\d.,]+)\s*(?:KG|KGS)?/i,
-    /PESO REAL\s*[:\n-]+\s*([\d.,]+)/i,
+    /PESO(?:\s+BRUTO)?(?:\s+TOTAL)?(?:\s+DA\s+CARGA)?(?:\s*\(\s*KG\s*\))?\s*[:\n-]+\s*([\d.,]+)\s*(?:KG|KGS)?/i,
+    /PESO\s+REAL(?:\s*\(\s*KG\s*\))?\s*[:\n-]+\s*([\d.,]+)/i,
+    /PESO\s+BRUTO\s+KG\s+([\d.,]+)/i,
   ]);
   const weightKg = weightRaw ? Number(weightRaw.replace(/\./g, "").replace(",", ".")) : null;
   const freightGross = parseMoney(text, ["VALOR A RECEBER", "VALOR TOTAL DA PRESTACAO DO SERVICO", "VALOR TOTAL DA PRESTAÇÃO DO SERVIÇO", "VALOR TOTAL DO FRETE"]);
@@ -77,12 +97,15 @@ export async function extractCte(buffer: Buffer): Promise<ExtractedCte> {
     tomadorName: name, tomadorCnpj: cnpj, invoiceValue,
     weightKg: Number.isFinite(weightKg as number) ? weightKg : null,
     freightGross, icmsValue, freightNet,
-    fields: { pdfPages: pdf.numPages, extractedTextLength: text.length, extractedTextSample: text.slice(0, 1000) },
+    fields: { pdfPages: pdf.numPages, extractedTextLength: text.length, extractedTextSample: text.slice(0, 5000), targetCompanyNameFound: isTargetCompany, targetCnpjFound: digitsOnly.includes(targetCnpj) },
     errors,
   };
 }
 
 export function evaluateFreight(data: ExtractedCte) {
+  if (!data.tomadorCnpj) {
+    return { status: "needs_review", reference: null, discrepancy: null, reason: "CNPJ do tomador não identificado com segurança." };
+  }
   if (data.tomadorCnpj !== "39860057000104") {
     return { status: "out_of_scope", reference: null, discrepancy: null, reason: "Tomador diferente da Brasil Engrenagens." };
   }
