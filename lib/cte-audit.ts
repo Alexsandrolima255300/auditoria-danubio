@@ -1,4 +1,4 @@
-import pdfParse from "pdf-parse";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 export type ExtractedCte = {
   tomadorName: string | null;
@@ -34,8 +34,14 @@ function parseMoney(text: string, labels: string[]): number | null {
 }
 
 export async function extractCte(buffer: Buffer): Promise<ExtractedCte> {
-  const parsed = await pdfParse(buffer);
-  const text = (parsed.text || "").replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ");
+  const pdf = await getDocument({ data: new Uint8Array(buffer), useSystemFonts: true, isEvalSupported: false }).promise;
+  const pages: string[] = [];
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+    pages.push(content.items.map((item: any) => "str" in item ? item.str : "").join(" "));
+  }
+  const text = pages.join("\n").replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ");
   const name = first(text, [
     /TOMADOR(?: DO SERVICO| DO SERVIÇO)?\s*[:\n-]+\s*([^\n]{4,100})/i,
     /NOME\s*\/\s*RAZAO SOCIAL[^\n]*\n\s*([^\n]{4,100})/i,
@@ -64,7 +70,7 @@ export async function extractCte(buffer: Buffer): Promise<ExtractedCte> {
     tomadorName: name, tomadorCnpj: cnpj, invoiceValue,
     weightKg: Number.isFinite(weightKg as number) ? weightKg : null,
     freightGross, icmsValue, freightNet,
-    fields: { pdfPages: parsed.numpages, extractedTextLength: text.length, extractedTextSample: text.slice(0, 1000) },
+    fields: { pdfPages: pdf.numPages, extractedTextLength: text.length, extractedTextSample: text.slice(0, 1000) },
     errors,
   };
 }
