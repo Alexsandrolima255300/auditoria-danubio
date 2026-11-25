@@ -91,7 +91,7 @@ export async function POST(req:NextRequest){
     if(!connections.length)throw new Error("Conexão Outlook não encontrada.");
     const connection=connections[0];const refresh=openToken(cookie);const tokens=await refreshMicrosoftToken(refresh);
     const cutoff=new Date(Date.now()-45*86400000).toISOString();
-    const mails=await db("email_messages?select=id,graph_message_id,subject,received_at&connection_id=eq."+connection.id+"&received_at=gte."+encodeURIComponent(cutoff)+"&order=received_at.desc&limit=1000");
+    const mails=await db("email_messages?select=id,graph_message_id,subject,received_at,has_attachments&has_attachments=eq.true&connection_id=eq."+connection.id+"&received_at=gte."+encodeURIComponent(cutoff)+"&order=received_at.desc&limit=1000");
     const offset = Math.max(0, Number(req.nextUrl.searchParams.get("offset") || 0));
     const batchSize = Math.min(10, Math.max(1, Number(req.nextUrl.searchParams.get("batch") || 5)));
     const batchMails = mails.slice(offset, offset + batchSize);
@@ -105,7 +105,7 @@ export async function POST(req:NextRequest){
         connection.id+"&email_message_id=eq."+encodeURIComponent(mail.id)+"&limit=50"
       );
       const emailAlreadyComplete=completedForEmail.length>0&&completedForEmail.every((invoice:any)=>
-        invoice.processing_status==="processed"&&Number(invoice.extraction_data?.parserVersion||0)>=4
+        invoice.processing_status==="processed"&&Number(invoice.extraction_data?.parserVersion||0)>=5
       );
       if(emailAlreadyComplete){
         completedInvoicesSkipped++;
@@ -116,7 +116,7 @@ export async function POST(req:NextRequest){
       for(const a of atts.value||[]){
         if(a.isInline||!((a.contentType||"").toLowerCase().includes("pdf")||(a.name||"").toLowerCase().endsWith(".pdf")))continue;
         const exists=await db("danubio_invoices?select=id,processing_status&connection_id=eq."+connection.id+"&graph_attachment_id=eq."+encodeURIComponent(a.id)+"&limit=1");
-        if(exists.length&&exists[0].processing_status==="processed"){const prior=await db("danubio_invoices?select=extraction_data&id=eq."+exists[0].id+"&limit=1");if(Number(prior[0]?.extraction_data?.parserVersion||0)>=4){invoices.push({id:exists[0].id,alreadyProcessed:true});continue;}}
+        if(exists.length&&exists[0].processing_status==="processed"){const prior=await db("danubio_invoices?select=extraction_data&id=eq."+exists[0].id+"&limit=1");if(Number(prior[0]?.extraction_data?.parserVersion||0)>=5){invoices.push({id:exists[0].id,alreadyProcessed:true});continue;}}
         const file=await graph(tokens.access_token,"/me/messages/"+encodeURIComponent(mail.graph_message_id)+"/attachments/"+encodeURIComponent(a.id));
         if(!file.contentBytes)continue;
         const buffer=Buffer.from(file.contentBytes,"base64");if(buffer.length>20*1024*1024)continue;
