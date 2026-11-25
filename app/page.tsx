@@ -7,6 +7,14 @@ const brl = (n: number | string | null | undefined) => {
   return typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'Não informado';
 };
 const dateTime = (value?: string | null) => value ? new Date(value).toLocaleString('pt-BR') : 'Data não informada';
+const textField = (text: string, pattern: RegExp) => {
+  const match = text.match(pattern);
+  return match?.[1]?.trim() || 'Não identificado no PDF';
+};
+const numberField = (text: string, pattern: RegExp) => {
+  const value = textField(text, pattern);
+  return value === 'Não identificado no PDF' ? value : value.replace(/\\s+/g, ' ');
+};
 const statusLabel = (status?: string) => (({ accepted: 'Aceito', divergent: 'Divergência', needs_review: 'Revisão necessária', out_of_scope: 'Fora do escopo', pending: 'Pendente', extracted: 'Extraído', error: 'Erro na leitura', discovered: 'Localizado', attachments_checked: 'Anexos conferidos' } as Record<string, string>)[status || ''] || status || 'Não informado');
 
 type Section = 'overview' | 'documents' | 'divergences' | 'newEmails' | 'emails';
@@ -290,6 +298,46 @@ export default function Home() {
               <div className="divergence-footer"><span className={'review-chip review-' + (review.review_status || 'pending')}>Revisão: {reviewStatusLabel}</span><span>{assessmentLabel}</span><b>{isSelected ? 'Fechar ▲' : 'Clique para revisar ▼'}</b></div>
             </button>
             {(audit.discrepancy_reason || doc.processing_status === 'error') && <p className="record-reason">{audit.discrepancy_reason || 'O PDF apresentou erro durante a leitura.'}</p>}
+            {isSelected && <div className="occurrence-details">
+              <h3>Detalhes da cobrança · CT-e</h3>
+              {(() => {
+                const raw = String(audit.extracted_fields?.extractedTextSample || '');
+                const icms = audit.extracted_fields?.icmsValue;
+                const baseFreight = audit.freight_charge;
+                const gross = audit.extracted_fields?.grossFreight ?? freight;
+                const cteNumber = textField(raw, /CTE Nº DOCUMENTO:\\s*([^\\s]+)/i);
+                const product = textField(raw, /PRODUTO PREDOMINANTE\\s+(.+?)\\s+OUTRAS CARACTERÍSTICAS/i);
+                const volumes = textField(raw, /QUANTIDADE DE VOLUMES \\(UND\\)\\s*([\\d.,]+)/i);
+                const cubage = textField(raw, /CUBAGEM \\(M3\\)\\s*([\\d.,]+)/i);
+                const origin = textField(raw, /INICIO DA PRESTAÇÃO\\s+(.+?)\\s+TERMINO DA PRESTAÇÃO/i);
+                const destination = textField(raw, /TERMINO DA PRESTAÇÃO\\s+(.+?)\\s+REMETENTE:/i);
+                const receiver = textField(raw, /VALOR A RECEBER\\s*([\\d.,]+)/i);
+                const icmsRate = textField(raw, /ALÍQUOTA DO ICMS\\s*([\\d.,]+)\\s*/i);
+                return <>
+                  <div className="record-grid">
+                    <span>Número do CT-e<strong>{cteNumber}</strong></span>
+                    <span>Valor da nota fiscal<strong>{brl(audit.invoice_value)}</strong></span>
+                    <span>Peso bruto<strong>{audit.weight_kg != null ? String(audit.weight_kg) + ' kg' : 'Não identificado'}</strong></span>
+                    <span>Quantidade de volumes<strong>{volumes === 'Não identificado no PDF' ? volumes : volumes + ' un.'}</strong></span>
+                    <span>Cubagem<strong>{cubage === 'Não identificado no PDF' ? cubage : cubage + ' m³'}</strong></span>
+                    <span>Produto predominante<strong>{product}</strong></span>
+                    <span>Origem<strong>{origin}</strong></span>
+                    <span>Destino<strong>{destination}</strong></span>
+                  </div>
+                  <h4>Composição dos valores cobrados</h4>
+                  <div className="record-grid">
+                    <span>Frete informado (sem ICMS)<strong>{brl(baseFreight)}</strong></span>
+                    <span>ICMS<strong>{brl(icms)}</strong></span>
+                    <span>Alíquota do ICMS<strong>{icmsRate === 'Não identificado no PDF' ? icmsRate : icmsRate + '%'}</strong></span>
+                    <span>Frete total com ICMS<strong>{brl(gross)}</strong></span>
+                    <span>Valor a receber<strong>{receiver === 'Não identificado no PDF' ? brl(gross) : brl(receiver.replace(/\\./g, '').replace(',', '.'))}</strong></span>
+                    <span>Valor de referência<strong>{brl(audit.reference_minimum)}</strong></span>
+                    <span>Diferença apurada<strong>{brl(audit.discrepancy_amount)}</strong></span>
+                  </div>
+                  <p className="detail-note">Os valores são apresentados conforme os campos extraídos do CT-e. O frete total considera o ICMS, conforme a regra de auditoria.</p>
+                </>;
+              })()}
+            </div>}
             {isSelected && <div className="review-editor">
               <h3>Revisão da ocorrência</h3>
               <label>Situação da ocorrência</label>
