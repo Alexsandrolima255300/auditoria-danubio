@@ -205,13 +205,16 @@ export default function Home() {
     const audit = doc.audit || {};
     const email = doc.email || {};
     const freight = audit.extracted_fields?.grossFreight ?? audit.freight_charge;
+    const rawText = String(audit.extracted_fields?.extractedTextSample || '');
+    const cteNumber = textField(rawText, /CTE Nº DOCUMENTO:\s*([^\s]+)/i);
     return <article className="record-card" key={doc.id}>
       <div className="record-heading">
         <div><b>{doc.file_name || 'Anexo sem nome'}</b><small>{email.subject || 'E-mail não identificado'} · {dateTime(email.received_at)}</small></div>
         <span className={'record-status ' + (audit.audit_status || doc.processing_status || 'pending')}>{statusLabel(audit.audit_status || doc.processing_status)}</span>
       </div>
       <div className="record-grid">
-        <span>Número do CT-e<strong>{cteNumber}</strong></span>\n        <span>Tomador<strong>{audit.tomador_cnpj || 'Não identificado'}</strong></span>
+        <span>Número do CT-e<strong>{cteNumber}</strong></span>
+        <span>Tomador<strong>{audit.tomador_cnpj || 'Não identificado'}</strong></span>
         <span>Valor da NF<strong>{brl(audit.invoice_value)}</strong></span>
         <span>Peso<strong>{audit.weight_kg != null ? String(audit.weight_kg) + ' kg' : 'Não identificado'}</strong></span>
         <span>Frete total<strong>{brl(freight)}</strong></span>
@@ -268,7 +271,7 @@ export default function Home() {
           const receivedAt = doc.email?.received_at;
           const day = receivedAt ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(receivedAt)) : '';
           const rawText = String(doc.audit?.extracted_fields?.extractedTextSample || '');
-          const cte = textField(rawText, /CTE Nº DOCUMENTO:\\s*([^\\s]+)/i);
+          const cte = textField(rawText, /CTE Nº DOCUMENTO:\s*([^\s]+)/i);
           const normalizedDocCte = cte.toLowerCase().replace(/[^a-z0-9]/g, '');
           const matchesDate = !searchDate || day === searchDate;
           const matchesCte = !normalizedCte || normalizedDocCte.includes(normalizedCte) || String(doc.file_name || '').toLowerCase().includes(searchCte.trim().toLowerCase());
