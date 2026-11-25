@@ -149,6 +149,17 @@ export async function POST(request: NextRequest) {
           if (attachment["@odata.type"] && !attachment["@odata.type"].includes("fileAttachment")) continue;
           if (attachment.isInline || !isPdf(attachment)) { ignored++; continue; }
           const attachmentId = attachment.id;
+          // Arquivos já extraídos ficam registrados e não são baixados/lidos novamente
+          // em varreduras automáticas. Só uma solicitação humana explícita força a releitura.
+          const previousAttachments = await db(
+            "freight_attachments?select=id,processing_status&email_message_id=eq." +
+            encodeURIComponent(messageId) + "&graph_attachment_id=eq." + encodeURIComponent(attachmentId) + "&limit=1"
+          );
+          const previousAttachment = previousAttachments?.[0];
+          if (previousAttachment?.processing_status === "extracted" && payload.reprocessProcessed !== true) {
+            ignored++;
+            continue;
+          }
           const savedAttachments = await db("freight_attachments?on_conflict=email_message_id,graph_attachment_id", {
             method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" },
             body: JSON.stringify({
@@ -199,6 +210,7 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({
       ok: true, mailbox, searched: ["Danubio", "Siimp Sistemas"], emailsFound: messages.length,
       emailsSaved, attachmentsSaved, pdfsRead, auditsCreated, ignored, errors,
+      alreadyProcessedSkipped: ignored,
       hasMore: danubio.hasMore || siimp.hasMore,
       nextDanubio: danubio.nextLink, nextSiimp: siimp.nextLink,
       doneDanubio: !danubio.hasMore, doneSiimp: !siimp.hasMore, results,
