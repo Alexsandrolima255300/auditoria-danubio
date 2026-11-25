@@ -79,8 +79,10 @@ export async function extractCte(buffer: Buffer): Promise<ExtractedCte> {
     "VALOR TOTAL DA NOTA", "VALOR DA NOTA",
   ]);
   const weightRaw = first(text, [
-    /PESO(?:\s+BRUTO)?(?:\s+TOTAL)?(?:\s+DA\s+CARGA)?(?:\s*\(\s*KG\s*\))?\s*[:\n-]+\s*([\d.,]+)\s*(?:KG|KGS)?/i,
-    /PESO\s+REAL(?:\s*\(\s*KG\s*\))?\s*[:\n-]+\s*([\d.,]+)/i,
+    // DACTE da Danubio costuma extrair como: "PESO BRUTO (KG) 87,4800".
+    // Aceita valor após espaço, dois-pontos, hífen ou quebra de linha.
+    /PESO(?:\s+BRUTO)?(?:\s+TOTAL)?(?:\s+DA\s+CARGA)?(?:\s*\(\s*KG\s*\))?\s*(?:[:\n-]\s*|\s+)([\d.,]+)\s*(?:KG|KGS)?/i,
+    /PESO\s+REAL(?:\s*\(\s*KG\s*\))?\s*(?:[:\n-]\s*|\s+)([\d.,]+)\s*(?:KG|KGS)?/i,
     /PESO\s+BRUTO\s+KG\s+([\d.,]+)/i,
   ]);
   const weightKg = weightRaw ? Number(weightRaw.replace(/\./g, "").replace(",", ".")) : null;
