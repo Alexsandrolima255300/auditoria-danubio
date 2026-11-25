@@ -88,7 +88,22 @@ export async function POST(req:NextRequest){
     const batchSize = Math.min(10, Math.max(1, Number(req.nextUrl.searchParams.get("batch") || 5)));
     const batchMails = mails.slice(offset, offset + batchSize);
     const invoices:any[]=[];
+    let completedInvoicesSkipped=0;
     for(const mail of batchMails){
+      // Se este e-mail já gerou uma ou mais faturas totalmente processadas
+      // pela versão atual do extrator, não precisamos nem consultar os anexos novamente.
+      const completedForEmail=await db(
+        "danubio_invoices?select=id,processing_status,extraction_data&connection_id=eq."+
+        connection.id+"&email_message_id=eq."+encodeURIComponent(mail.id)+"&limit=50"
+      );
+      const emailAlreadyComplete=completedForEmail.length>0&&completedForEmail.every((invoice:any)=>
+        invoice.processing_status==="processed"&&Number(invoice.extraction_data?.parserVersion||0)>=4
+      );
+      if(emailAlreadyComplete){
+        completedInvoicesSkipped++;
+        invoices.push({email:mail.subject,alreadyProcessed:true,reason:"Todas as faturas deste e-mail já estão concluídas."});
+        continue;
+      }
       const atts=await graph(tokens.access_token,"/me/messages/"+encodeURIComponent(mail.graph_message_id)+"/attachments?$top=50");
       for(const a of atts.value||[]){
         if(a.isInline||!((a.contentType||"").toLowerCase().includes("pdf")||(a.name||"").toLowerCase().endsWith(".pdf")))continue;
@@ -156,6 +171,6 @@ export async function POST(req:NextRequest){
       }
     }
     const saved=await db("danubio_invoices?select=*,items:danubio_invoice_items(*)&connection_id=eq."+connection.id+"&created_at=gte."+encodeURIComponent(cutoff)+"&order=created_at.desc&limit=200");
-    return NextResponse.json({ok:true,found:invoices.length,invoices:saved,processedNow:invoices,scannedEmails:batchMails.length,totalEmails:mails.length,nextOffset:offset+batchMails.length,hasMore:offset+batchMails.length<mails.length});
+    return NextResponse.json({ok:true,found:invoices.length,invoices:saved,processedNow:invoices,scannedEmails:batchMails.length,totalEmails:mails.length,completedInvoicesSkipped,nextOffset:offset+batchMails.length,hasMore:offset+batchMails.length<mails.length});
   }catch(e){return NextResponse.json({error:e instanceof Error?e.message:"Falha ao conferir faturas."},{status:500});}
 }
