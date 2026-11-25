@@ -46,7 +46,8 @@ export async function GET(request: NextRequest) {
       ok: true,
       retentionDays: 45,
       cutoff,
-      deletedEmails: Array.isArray(deletedMessages) ? deletedMessages.length : 0, 
+      deletedEmails: Array.isArray(deletedMessages) ? deletedMessages.length : 0,
+      deletedInvoices: Array.isArray(deletedInvoices) ? deletedInvoices.length : 0,
       deletedInvoices: Array.isArray(deletedInvoices) ? deletedInvoices.length : 0,
       note: "Anexos, auditorias e revisões vinculados são removidos automaticamente pelo banco em cascata. Faturas e itens vinculados a e-mails antigos também são removidos; checkpoints e resumos diários são preservados.",
     });
