@@ -121,7 +121,7 @@ export async function POST(req:NextRequest){
             const wd=weightDiff!==null&&Math.abs(weightDiff)>0.001;const vd=valueDiff!==null&&Math.abs(valueDiff)>0.01;
             status=wd&&vd?"both_different":wd?"weight_difference":vd?"value_difference":"matched";
           }
-          payload.push({...item,original_attachment_id:original?.attachment_id||null,original_weight_kg:original?.weight_kg??null,original_freight_total:originalTotal,weight_difference:weightDiff,value_difference:valueDiff,comparison_status:status});
+          payload.push({...item,invoice_id:invoiceId,original_attachment_id:original?.attachment_id||null,original_weight_kg:original?.weight_kg??null,original_freight_total:originalTotal,weight_difference:weightDiff,value_difference:valueDiff,comparison_status:status});
         }
         for(let i=0;i<payload.length;i+=100){
           await db("danubio_invoice_items",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify(payload.slice(i,i+100))});
