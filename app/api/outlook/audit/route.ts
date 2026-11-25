@@ -32,7 +32,7 @@ async function graph(accessToken: string, path: string) {
 async function searchAll(accessToken: string, term: string, maxMessages: number, startingUrl?: string | null) {
   const first = new URL("https://graph.microsoft.com/v1.0/me/messages");
   first.searchParams.set("$search", '"' + term + '"');
-  first.searchParams.set("$top", "50");
+  first.searchParams.set("$top", String(maxMessages));
   first.searchParams.set("$select", "id,subject,from,receivedDateTime,hasAttachments,internetMessageId,conversationId");
   let next: string | null = startingUrl || first.toString();
   const items: any[] = [];
@@ -83,8 +83,8 @@ export async function POST(request: NextRequest) {
     }
 
     const [danubio, siimp] = await Promise.all([
-      searchAll(tokens.access_token, "Danubio", 50, payload.cursorDanubio),
-      searchAll(tokens.access_token, "Siimp Sistemas", 50, payload.cursorSiimp),
+      searchAll(tokens.access_token, "Danubio", 2, payload.cursorDanubio),
+      searchAll(tokens.access_token, "Siimp Sistemas", 2, payload.cursorSiimp),
     ]);
     const unique = new Map<string, any>();
     for (const m of [...danubio.items, ...siimp.items]) unique.set(m.id, m);
