@@ -132,6 +132,21 @@
 @media(max-width:700px){.audit-search-fields{grid-template-columns:1fr}.audit-search-fields .search-clear{width:100%}.search-results-heading{display:block}.search-results-heading span{display:block;margin-top:5px}}
 
 .invoice-toolbar{display:flex;gap:9px;align-items:center}.invoice-toolbar button{width:auto;white-space:nowrap}
+
+/* Pastas persistentes de faturas agrupadas pelo período identificado no PDF */
+.invoice-folders-list{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+.invoice-folder{overflow:hidden;border:1px solid #dfe6f0;border-radius:11px;background:#f8faff}
+.invoice-folder-toggle{display:flex;align-items:center;gap:12px;width:100%;margin:0;padding:14px 16px;text-align:left;color:#26354c;background:#f1f5fb;border:0;border-radius:0}
+.invoice-folder-toggle:hover{background:#eaf0fa}
+.invoice-folder-icon{font-size:21px;line-height:1}
+.invoice-folder-name{display:flex;flex-direction:column;gap:4px;min-width:0}
+.invoice-folder-name b{font-size:12px}
+.invoice-folder-name small{font-size:10px;color:#8290a4}
+.invoice-folder-chevron{margin-left:auto;color:#315efb;font-size:10px;font-weight:700;white-space:nowrap}
+.invoice-folder-records{padding:12px;background:#fff}
+.invoice-folder-records .record-card:last-child{margin-bottom:0}
+@media(max-width:520px){.invoice-folder-toggle{padding:12px}.invoice-folder-chevron{font-size:9px}}
+
 .invoice-card-toggle{display:block;width:100%;margin:0;padding:0;background:transparent;color:inherit;text-align:left;font-weight:400}
 .invoice-card-toggle:hover{background:#fbfcff}
 .invoice-expand-label{margin-top:14px;color:#315efb;font-size:10px;font-weight:700}
