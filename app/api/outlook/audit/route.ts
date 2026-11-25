@@ -106,9 +106,15 @@ export async function POST(request: NextRequest) {
       connectionId = created[0].id;
     }
 
+    // Cada termo possui paginação independente. Quando uma busca termina,
+    // done=true impede que ela reinicie na primeira página nos próximos lotes.
     const [danubio, siimp] = await Promise.all([
-      searchAll(tokens.access_token, "Danubio", 2, payload.cursorDanubio),
-      searchAll(tokens.access_token, "Siimp Sistemas", 2, payload.cursorSiimp),
+      payload.doneDanubio === true
+        ? Promise.resolve({ items: [] as any[], hasMore: false, nextLink: null })
+        : searchAll(tokens.access_token, "Danubio", 2, payload.cursorDanubio),
+      payload.doneSiimp === true
+        ? Promise.resolve({ items: [] as any[], hasMore: false, nextLink: null })
+        : searchAll(tokens.access_token, "Siimp Sistemas", 2, payload.cursorSiimp),
     ]);
     const unique = new Map<string, any>();
     for (const m of [...danubio.items, ...siimp.items]) unique.set(m.id, m);
@@ -193,7 +199,9 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({
       ok: true, mailbox, searched: ["Danubio", "Siimp Sistemas"], emailsFound: messages.length,
       emailsSaved, attachmentsSaved, pdfsRead, auditsCreated, ignored, errors,
-      hasMore: danubio.hasMore || siimp.hasMore, nextDanubio: danubio.nextLink, nextSiimp: siimp.nextLink, results,
+      hasMore: danubio.hasMore || siimp.hasMore,
+      nextDanubio: danubio.nextLink, nextSiimp: siimp.nextLink,
+      doneDanubio: !danubio.hasMore, doneSiimp: !siimp.hasMore, results,
       note: "Mensagens e anexos PDF encontrados foram processados. Campos não identificados ficam em revisão; nenhuma contestação é enviada.",
     });
     if (tokens.refresh_token) response.cookies.set("outlook_refresh", sealToken(tokens.refresh_token), {
