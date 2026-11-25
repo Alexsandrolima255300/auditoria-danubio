@@ -62,7 +62,16 @@ function parseInvoice(text:string) {
   return {invoiceNo,issued:date(issued||""),due:date(due||""),total:money(total||""),totalWeight:num(totalWeight||""),totalServices:money(totalServices||""),totalIcms:money(totalIcms||""),docCount:docCount?Number(docCount):null,items,pages:0,textLength:text.length};
 }
 function normCte(v:string){return String(v||"").replace(/\s/g,"").toUpperCase();}
-export async function GET(req:NextRequest){return POST(req);}
+export async function GET(req:NextRequest){
+  const cookie=req.cookies.get("outlook_refresh")?.value;
+  if(!cookie)return NextResponse.json({error:"Outlook ainda não conectado."},{status:401});
+  try{
+    const connections=await db("outlook_connections?select=id&revoked_at=is.null&order=last_refreshed_at.desc&limit=1");
+    if(!connections.length)throw new Error("Conexão Outlook não encontrada.");
+    const saved=await db("danubio_invoices?select=*,items:danubio_invoice_items(*)&connection_id=eq."+connections[0].id+"&order=created_at.desc&limit=100");
+    return NextResponse.json({ok:true,invoices:saved});
+  }catch(e){return NextResponse.json({error:e instanceof Error?e.message:"Falha ao carregar faturas."},{status:500});}
+}
 export async function POST(req:NextRequest){
   const cookie=req.cookies.get("outlook_refresh")?.value;
   if(!cookie)return NextResponse.json({error:"Outlook ainda não conectado."},{status:401});
