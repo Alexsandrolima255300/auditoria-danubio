@@ -39,7 +39,12 @@ export async function POST(request: NextRequest) {
     const name = String(body.name || "").trim().replace(/\s+/g, " ");
     if (name.length < 3 || name.length > 100) return NextResponse.json({ error: "Informe o nome completo do responsável (3 a 100 caracteres)." }, { status: 400 });
     const date = todayBrasilia();
-    const nextDate = new Date(date + "T12:00:00-03:00"); nextDate.setDate(nextDate.getDate() + 1);\n    const nextDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(nextDate);\n    const [emails, audits] = await Promise.all([\n      db("email_messages?select=id&received_at=gte." + date + "T00:00:00-03:00&received_at=lt." + nextDay + "T00:00:00-03:00"),\n      db("freight_audits?select=id&created_at=gte." + date + "T00:00:00-03:00&created_at=lt." + nextDay + "T00:00:00-03:00")\n    ]);
+    const nextDate = new Date(date + "T12:00:00-03:00"); nextDate.setDate(nextDate.getDate() + 1);
+    const nextDay = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(nextDate);
+    const [emails, audits] = await Promise.all([
+      db("email_messages?select=id&received_at=gte." + date + "T00:00:00-03:00&received_at=lt." + nextDay + "T00:00:00-03:00"),
+      db("freight_audits?select=id&created_at=gte." + date + "T00:00:00-03:00&created_at=lt." + nextDay + "T00:00:00-03:00")
+    ]);
     const saved = await db("daily_audit_confirmations?on_conflict=audit_date", {
       method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" },
       body: JSON.stringify({ audit_date: date, status: "confirmed", confirmed_by: name, confirmed_at: new Date().toISOString(), email_count: emails.length, audit_count: audits.length, updated_at: new Date().toISOString() })
