@@ -39,7 +39,7 @@ function parseInvoice(text:string) {
   const issued=normalized.match(/DATA DE EMISS[ÃA]O\s+N[º°]?\s*FATURA[\s\S]{0,100}?(\d{2}\/\d{2}\/\d{4})/i)?.[1] || null;
   const due=normalized.match(/VENCIMENTO[\s\S]{0,80}?(\d{2}\/\d{2}\/\d{4})/i)?.[1] || null;
   const total=normalized.match(/TOTAL\s+R\$\s*([\d.]+,\d{2})/i)?.[1] || normalized.match(/VALOR DA FATURA\s+R\$\s*([\d.]+,\d{2})/i)?.[1] || null;
-  const totalWeight=normalized.match(/([\\d.]+,\\d{3})\\s*KG/i)?.[1] || null;
+  const totalWeight=normalized.match(/([\d.]+,\d{3})\s*KG/i)?.[1] || null;
   const totalServices=normalized.match(/TOTAL SERVI[ÇC]O\s+R\$\s*([\d.]+,\d{2})/i)?.[1] || null;
   const totalIcms=normalized.match(/ICMS\s+R\$\s*([\d.]+,\d{2})/i)?.[1] || null;
   const docCount=normalized.match(/QTD\.\s*DOC\.\s+(\d+)/i)?.[1] || null;
