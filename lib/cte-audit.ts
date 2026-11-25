@@ -61,7 +61,7 @@ export async function extractCte(buffer: Buffer): Promise<ExtractedCte> {
   let cnpj: string | null = null;
   if (isTargetCompany && digitsOnly.includes(targetCnpj)) {
     cnpj = targetCnpj;
-  } else {
+  } else if (!isTargetCompany) {
     // Para outros tomadores, só aceite CNPJ próximo ao rótulo TOMADOR.
     const tomadorIndex = text.search(/TOMADOR(?:\s+DO\s+SERVI[ÇC]O)?/i);
     if (tomadorIndex >= 0) {
