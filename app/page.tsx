@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 
 const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const onlyDigits = (s: string) => s.replace(/\\D/g, '');
+const onlyDigits = (s: string) => s.replace(/\D/g, '');
 const cents = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 type Mail = { id: string; subject: string; sender: string; senderEmail: string; receivedAt: string; hasAttachments: boolean; preview: string; webLink: string };
