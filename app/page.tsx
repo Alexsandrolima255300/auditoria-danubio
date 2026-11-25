@@ -7,7 +7,7 @@ const brl = (n: number | string | null | undefined) => {
   return typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'Não informado';
 };
 const dateTime = (value?: string | null) => value ? new Date(value).toLocaleString('pt-BR') : 'Data não informada';
-const statusLabel = (status?: string) => ({ accepted: 'Aceito', divergent: 'Divergência', needs_review: 'Revisão necessária', out_of_scope: 'Fora do escopo', pending: 'Pendente', extracted: 'Extraído', error: 'Erro na leitura', discovered: 'Localizado', attachments_checked: 'Anexos conferidos' }[status || ''] || status || 'Não informado');
+const statusLabel = (status?: string) => (({ accepted: 'Aceito', divergent: 'Divergência', needs_review: 'Revisão necessária', out_of_scope: 'Fora do escopo', pending: 'Pendente', extracted: 'Extraído', error: 'Erro na leitura', discovered: 'Localizado', attachments_checked: 'Anexos conferidos' } as Record<string, string>)[status || ''] || status || 'Não informado');
 
 type Section = 'overview' | 'documents' | 'divergences' | 'emails';
 type Mail = { id: string; subject: string; sender: string; senderEmail: string; receivedAt: string; hasAttachments: boolean; preview: string; webLink: string };
