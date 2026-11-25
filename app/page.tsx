@@ -40,6 +40,11 @@ export default function Home() {
   const [savedData, setSavedData] = useState<AuditData | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState('');
+  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
+  const [reviewDraft, setReviewDraft] = useState({ reviewStatus: 'pending', assessment: '', reason: '', reviewedBy: '' });
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewError, setReviewError] = useState('');
+  const [reviewSuccess, setReviewSuccess] = useState('');
 
   const loadAuditData = useCallback(async () => {
     setDataLoading(true);
@@ -98,6 +103,27 @@ export default function Home() {
     const timer = window.setInterval(() => { void syncEmails(); }, 60000);
     return () => window.clearInterval(timer);
   }, [connected]);
+
+  async function saveDivergenceReview(attachmentId: string) {
+    setReviewSaving(true);
+    setReviewError('');
+    setReviewSuccess('');
+    try {
+      const response = await fetch('/api/outlook/divergence-review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attachmentId, ...reviewDraft }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível salvar a revisão.');
+      setReviewSuccess('Revisão salva com sucesso.');
+      await loadAuditData();
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : 'Falha ao salvar a revisão.');
+    } finally {
+      setReviewSaving(false);
+    }
+  }
 
   async function confirmDailyAudit() {
     setConfirmationLoading(true);
@@ -233,9 +259,58 @@ export default function Home() {
       </section>}
 
       {activeSection === 'divergences' && <section className="data-section">
-        <div className="section-toolbar"><div><h2>Itens que exigem atenção</h2><p>{divergences.length} ocorrência(s) · contestação exige revisão humana</p></div><button className="refresh-button" onClick={() => void loadAuditData()} disabled={dataLoading}>{dataLoading ? 'Atualizando...' : 'Atualizar lista'}</button></div>
+        <div className="section-toolbar"><div><h2>Itens que exigem atenção</h2><p>{divergences.length} ocorrência(s) · clique em uma ocorrência para registrar a revisão</p></div><button className="refresh-button" onClick={() => void loadAuditData()} disabled={dataLoading}>{dataLoading ? 'Atualizando...' : 'Atualizar lista'}</button></div>
         {dataError && <div className="mail-error">{dataError}</div>}
-        {divergences.length ? <div className="record-list">{divergences.map(renderDocument)}</div> : <div className="empty-state success-empty"><span>✓</span><b>Nenhuma divergência registrada</b><p>Não há divergências, erros de leitura ou revisões pendentes nos documentos salvos.</p></div>}
+        {divergences.length ? <div className="record-list">{divergences.map((doc: any) => {
+          const audit = doc.audit || {};
+          const email = doc.email || {};
+          const review = doc.review || {};
+          const isSelected = selectedReviewId === doc.id;
+          const freight = audit.extracted_fields?.grossFreight ?? audit.freight_charge;
+          const reviewStatusLabel = ({ pending: 'Pendente', in_progress: 'Em andamento', completed: 'Concluída' } as Record<string, string>)[review.review_status || 'pending'];
+          const assessmentLabel = ({ correct_charge: 'Cobrança correta', incorrect_charge: 'Cobrança incorreta', unconfirmed: 'Não confirmado' } as Record<string, string>)[review.assessment || ''] || 'Não avaliada';
+          return <article className={'record-card divergence-card ' + (isSelected ? 'expanded' : '')} key={doc.id}>
+            <button className="divergence-open" onClick={() => {
+              setSelectedReviewId(isSelected ? null : doc.id);
+              setReviewDraft({
+                reviewStatus: review.review_status || 'pending',
+                assessment: review.assessment || '',
+                reason: review.reason || '',
+                reviewedBy: review.reviewed_by || '',
+              });
+              setReviewError('');
+              setReviewSuccess('');
+            }}>
+              <div className="record-heading"><div><b>{doc.file_name || 'Anexo sem nome'}</b><small>{email.subject || 'E-mail não identificado'} · {dateTime(email.received_at)}</small></div><span className={'record-status ' + (audit.audit_status || doc.processing_status || 'pending')}>{statusLabel(audit.audit_status || doc.processing_status)}</span></div>
+              <div className="record-grid">
+                <span>Frete total<strong>{brl(freight)}</strong></span>
+                <span>Referência<strong>{brl(audit.reference_minimum)}</strong></span>
+                <span>Diferença<strong>{brl(audit.discrepancy_amount)}</strong></span>
+              </div>
+              <div className="divergence-footer"><span className={'review-chip review-' + (review.review_status || 'pending')}>Revisão: {reviewStatusLabel}</span><span>{assessmentLabel}</span><b>{isSelected ? 'Fechar ▲' : 'Clique para revisar ▼'}</b></div>
+            </button>
+            {(audit.discrepancy_reason || doc.processing_status === 'error') && <p className="record-reason">{audit.discrepancy_reason || 'O PDF apresentou erro durante a leitura.'}</p>}
+            {isSelected && <div className="review-editor">
+              <h3>Revisão da ocorrência</h3>
+              <label>Situação da ocorrência</label>
+              <select value={reviewDraft.reviewStatus} onChange={e => setReviewDraft(v => ({ ...v, reviewStatus: e.target.value }))}>
+                <option value="pending">Pendente</option><option value="in_progress">Em andamento</option><option value="completed">Concluída</option>
+              </select>
+              <label>A cobrança está correta?</label>
+              <select value={reviewDraft.assessment} onChange={e => setReviewDraft(v => ({ ...v, assessment: e.target.value }))}>
+                <option value="">Selecione uma avaliação</option><option value="correct_charge">Sim, está correta</option><option value="incorrect_charge">Não, está incorreta</option><option value="unconfirmed">Ainda não foi possível confirmar</option>
+              </select>
+              <label>Motivo da divergência / observações</label>
+              <textarea rows={4} maxLength={3000} value={reviewDraft.reason} onChange={e => setReviewDraft(v => ({ ...v, reason: e.target.value }))} placeholder="Descreva por que a cobrança diverge, o que foi verificado e qual providência foi tomada..." />
+              <label>Responsável pela revisão</label>
+              <input value={reviewDraft.reviewedBy} maxLength={100} onChange={e => setReviewDraft(v => ({ ...v, reviewedBy: e.target.value }))} placeholder="Nome de quem analisou" />
+              <div className="review-actions"><button onClick={() => void saveDivergenceReview(doc.id)} disabled={reviewSaving}>{reviewSaving ? 'Salvando...' : 'Salvar revisão'}</button></div>
+              {reviewError && <div className="mail-error">{reviewError}</div>}
+              {reviewSuccess && <div className="mail-success">{reviewSuccess}</div>}
+              {review.reviewed_at && <small className="review-last">Última revisão salva em {dateTime(review.reviewed_at)}{review.reviewed_by ? ' por ' + review.reviewed_by : ''}.</small>}
+            </div>}
+          </article>;
+        })}</div> : <div className="empty-state success-empty"><span>✓</span><b>Nenhuma divergência registrada</b><p>Não há divergências, erros de leitura ou revisões pendentes nos documentos salvos.</p></div>}
       </section>}
 
       {activeSection === 'newEmails' && <section className="data-section">
