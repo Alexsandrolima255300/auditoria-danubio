@@ -323,11 +323,12 @@ export default function Home() {
           const matchedItems=items.filter((item:any)=>item.comparison_status==='matched');
           const sumField=(rows:any[],field:string)=>rows.reduce((sum:number,item:any)=>sum+(Number(item[field])||0),0);
           const reportCharged=sumField(items,'charged_total');
-          const reportOriginal=sumField(items.filter((item:any)=>item.original_freight_total!=null),'original_freight_total');
-          const reportAbove=sumField(items.filter((item:any)=>Number(item.value_difference)>0),'value_difference');
-          const reportBelow=Math.abs(sumField(items.filter((item:any)=>Number(item.value_difference)<0),'value_difference'));
-          const reportWeight=sumField(items,'weight_difference');
-          const reportValueDifference=sumField(items.filter((item:any)=>item.value_difference!=null),'value_difference');
+          const comparableItems=items.filter((item:any)=>item.original_freight_total!=null&&item.comparison_status!=='duplicate');
+          const reportOriginal=sumField(comparableItems,'original_freight_total');
+          const reportAbove=sumField(comparableItems.filter((item:any)=>Number(item.value_difference)>0),'value_difference');
+          const reportBelow=Math.abs(sumField(comparableItems.filter((item:any)=>Number(item.value_difference)<0),'value_difference'));
+          const reportWeight=sumField(comparableItems,'weight_difference');
+          const reportValueDifference=sumField(comparableItems.filter((item:any)=>item.value_difference!=null),'value_difference');
           const reportNotFound=items.filter((item:any)=>item.comparison_status==='not_found').length;
           const reportDuplicate=items.filter((item:any)=>item.comparison_status==='duplicate').length;
           const reportWeightCount=items.filter((item:any)=>['weight_difference','both_different'].includes(item.comparison_status)).length;
