@@ -29,15 +29,15 @@ async function graph(accessToken: string, path: string) {
   if (!response.ok) throw new Error(data.error?.message || "Microsoft Graph HTTP " + response.status);
   return data;
 }
-async function searchAll(accessToken: string, term: string, maxMessages: number) {
+async function searchAll(accessToken: string, term: string, maxMessages: number, startingUrl?: string | null) {
   const first = new URL("https://graph.microsoft.com/v1.0/me/messages");
   first.searchParams.set("$search", '"' + term + '"');
   first.searchParams.set("$top", "50");
   first.searchParams.set("$select", "id,subject,from,receivedDateTime,hasAttachments,internetMessageId,conversationId");
-  let next: string | null = first.toString();
+  let next: string | null = startingUrl || first.toString();
   const items: any[] = [];
   let pages = 0;
-  while (next && items.length < maxMessages && pages < 20) {
+  while (next && items.length < maxMessages && pages < 1) {
     const response = await fetch(next, { headers: { Authorization: "Bearer " + accessToken, ConsistencyLevel: "eventual" }, cache: "no-store" });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error?.message || "Falha na busca de e-mails.");
@@ -82,8 +82,8 @@ export async function POST(request: NextRequest) {
     }
 
     const [danubio, siimp] = await Promise.all([
-      searchAll(tokens.access_token, "Danubio", 100),
-      searchAll(tokens.access_token, "Siimp Sistemas", 100),
+      searchAll(tokens.access_token, "Danubio", 50, payload.cursorDanubio),
+      searchAll(tokens.access_token, "Siimp Sistemas", 50, payload.cursorSiimp),
     ]);
     const unique = new Map<string, any>();
     for (const m of [...danubio.items, ...siimp.items]) unique.set(m.id, m);
@@ -168,7 +168,7 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({
       ok: true, mailbox, searched: ["Danubio", "Siimp Sistemas"], emailsFound: messages.length,
       emailsSaved, attachmentsSaved, pdfsRead, auditsCreated, ignored, errors,
-      hasMore: danubio.hasMore || siimp.hasMore, results,
+      hasMore: danubio.hasMore || siimp.hasMore, nextDanubio: danubio.nextLink, nextSiimp: siimp.nextLink, results,
       note: "Mensagens e anexos PDF encontrados foram processados. Campos não identificados ficam em revisão; nenhuma contestação é enviada.",
     });
     if (tokens.refresh_token) response.cookies.set("outlook_refresh", sealToken(tokens.refresh_token), {
