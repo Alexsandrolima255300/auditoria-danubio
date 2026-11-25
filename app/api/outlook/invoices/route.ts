@@ -70,7 +70,8 @@ export async function GET(req:NextRequest){
   try{
     const connections=await db("outlook_connections?select=id&revoked_at=is.null&order=last_refreshed_at.desc&limit=1");
     if(!connections.length)throw new Error("Conexão Outlook não encontrada.");
-    const saved=await db("danubio_invoices?select=*,items:danubio_invoice_items(*)&connection_id=eq."+connections[0].id+"&order=created_at.desc&limit=100");
+    const cutoff=new Date(Date.now()-45*86400000).toISOString();
+    const saved=await db("danubio_invoices?select=*,items:danubio_invoice_items(*)&connection_id=eq."+connections[0].id+"&created_at=gte."+encodeURIComponent(cutoff)+"&order=created_at.desc&limit=200");
     return NextResponse.json({ok:true,invoices:saved});
   }catch(e){return NextResponse.json({error:e instanceof Error?e.message:"Falha ao carregar faturas."},{status:500});}
 }
@@ -154,7 +155,7 @@ export async function POST(req:NextRequest){
         invoices.push({id:invoiceId,invoiceNumber:parsed.invoiceNo,fileName:a.name,documentCount:parsed.docCount,parsedRows:payload.length,total:parsed.total,totalWeight:parsed.totalWeight,statuses,totalsCheck,processingStatus:processed?"processed":"needs_review"});
       }
     }
-    const saved=await db("danubio_invoices?select=*,items:danubio_invoice_items(*)&connection_id=eq."+connection.id+"&order=created_at.desc&limit=100");
+    const saved=await db("danubio_invoices?select=*,items:danubio_invoice_items(*)&connection_id=eq."+connection.id+"&created_at=gte."+encodeURIComponent(cutoff)+"&order=created_at.desc&limit=200");
     return NextResponse.json({ok:true,found:invoices.length,invoices:saved,processedNow:invoices,scannedEmails:batchMails.length,totalEmails:mails.length,nextOffset:offset+batchMails.length,hasMore:offset+batchMails.length<mails.length});
   }catch(e){return NextResponse.json({error:e instanceof Error?e.message:"Falha ao conferir faturas."},{status:500});}
 }
