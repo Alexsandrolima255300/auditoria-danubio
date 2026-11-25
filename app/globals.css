@@ -155,6 +155,40 @@
 .invoice-progress-detail{margin-top:8px;font-size:10px;color:#64748b;font-variant-numeric:tabular-nums}
 @media(max-width:480px){.invoice-progress-detail{align-items:flex-start;flex-direction:column;gap:4px}}
 
+/* Detalhamento individual e impressão de divergência da fatura */
+.invoice-discrepancy-row{cursor:pointer}
+.invoice-discrepancy-row:hover td{background:#f2f6ff;color:#243f85}
+.invoice-discrepancy-row:focus{outline:2px solid #315efb;outline-offset:-2px}
+.invoice-discrepancy-backdrop{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,25,42,.58);overflow-y:auto}
+.invoice-discrepancy-modal{width:min(760px,100%);max-height:calc(100vh - 36px);overflow-y:auto;padding:25px;border-radius:14px;background:#fff;box-shadow:0 24px 70px rgba(0,0,0,.24);color:#26354c}
+.invoice-discrepancy-heading{display:flex;justify-content:space-between;gap:18px;align-items:flex-start}
+.invoice-discrepancy-heading h2{margin:7px 0 5px;font-size:20px;color:#26354c}
+.invoice-discrepancy-heading p{margin:0;color:#8290a4;font-size:11px}
+.invoice-discrepancy-close{width:34px;height:34px;margin:0;padding:0;background:#f0f3f8;color:#52627a;font-size:22px}
+.invoice-discrepancy-status{margin:18px 0 10px}
+.invoice-discrepancy-status b{display:inline-block;padding:7px 10px;border-radius:6px;background:#fff2e8;color:#a96822;font-size:10px}
+.invoice-discrepancy-explanation{margin:0 0 17px;padding:13px 14px;border-left:3px solid #e2a14a;border-radius:5px;background:#fffaf3;color:#5e4b31;font-size:12px;line-height:1.7}
+.invoice-discrepancy-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.invoice-discrepancy-values>div{padding:13px;border:1px solid #e8edf4;border-radius:8px;background:#fbfcff}
+.invoice-discrepancy-values small{display:block;color:#8290a4;font-size:10px}
+.invoice-discrepancy-values strong{display:block;margin-top:6px;color:#26354c;font-size:15px}
+.invoice-discrepancy-guidance{margin-top:15px;padding:14px;border:1px solid #dce5f2;border-radius:8px;background:#f8faff}
+.invoice-discrepancy-guidance b{font-size:11px}
+.invoice-discrepancy-guidance p{margin:7px 0;color:#59677c;font-size:11px;line-height:1.65}
+.invoice-discrepancy-guidance small{color:#8290a4;font-size:10px}
+.invoice-discrepancy-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:19px}
+.invoice-discrepancy-actions button{width:auto;margin:0}
+.invoice-discrepancy-foot{margin:14px 0 0;color:#8290a4;font-size:9px;line-height:1.5}
+@media(max-width:600px){.invoice-discrepancy-backdrop{padding:8px;align-items:flex-start}.invoice-discrepancy-modal{max-height:calc(100vh - 16px);padding:17px}.invoice-discrepancy-heading h2{font-size:17px}.invoice-discrepancy-values{grid-template-columns:1fr}.invoice-discrepancy-actions{flex-direction:column-reverse}.invoice-discrepancy-actions button{width:100%}}
+@media print{
+  body.printing-invoice-discrepancy *{visibility:hidden!important}
+  body.printing-invoice-discrepancy .invoice-report,body.printing-invoice-discrepancy .invoice-report *{visibility:hidden!important}
+  body.printing-invoice-discrepancy .invoice-discrepancy-backdrop,body.printing-invoice-discrepancy .invoice-discrepancy-backdrop *{visibility:visible!important}
+  body.printing-invoice-discrepancy .invoice-discrepancy-backdrop{position:absolute!important;inset:0!important;display:block!important;padding:0!important;background:#fff!important;overflow:visible!important}
+  body.printing-invoice-discrepancy .invoice-discrepancy-modal{position:static!important;width:100%!important;max-height:none!important;overflow:visible!important;padding:20px!important;border:0!important;border-radius:0!important;box-shadow:none!important}
+  body.printing-invoice-discrepancy .no-print{display:none!important}
+}
+
 
 .invoice-report{margin:0 0 18px;padding:18px;border:1px solid #dce5f2;border-radius:11px;background:#fbfcff}
 .invoice-report-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
