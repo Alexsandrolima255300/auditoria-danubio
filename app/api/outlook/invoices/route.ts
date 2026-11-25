@@ -35,8 +35,16 @@ async function pdfText(buffer:Buffer) {
 }
 function parseInvoice(text:string) {
   const normalized=text.replace(/\u00a0/g," ").replace(/[ \t]+/g," ");
-  const invoiceNo=normalized.match(/FATURA[\s\S]{0,500}?\b(\d{4,})\s+EMITIDA/i)?.[1] || normalized.match(/N[º°]?\s*FATURA\s+(\d{4,})/i)?.[1] || null;
-  const issued=normalized.match(/DATA DE\s+EMISS[ÃA]O[\s\S]{0,220}?(\d{2}\/\d{2}\/\d{4})/i)?.[1] || null;
+  // A Danúbio posiciona o número da fatura em uma coluna separada do título.
+  // Capturamos o número junto ao status EMITIDA ou na linha DATA DE EMISSÃO.
+  const headerEnd=normalized.search(/\bDOCUMENTOS\b/i);
+  const invoiceHeader=headerEnd>=0?normalized.slice(0,headerEnd):normalized.slice(0,2500);
+  const headerDateAndNumber=invoiceHeader.match(/\b(\d{2}\/\d{2}\/\d{4})\s+(\d{4,})\b/);
+  const invoiceNo=invoiceHeader.match(/\b(\d{4,})\s+EMITIDA\b/i)?.[1] ||
+    headerDateAndNumber?.[2] ||
+    invoiceHeader.match(/N[º°]?\s*FATURA[\s\S]{0,250}?(\d{4,})\b/i)?.[1] || null;
+  const issued=headerDateAndNumber?.[1] ||
+    invoiceHeader.match(/DATA DE\s+EMISS[ÃA]O[\s\S]{0,500}?(\d{2}\/\d{2}\/\d{4})/i)?.[1] || null;
   const due=normalized.match(/VENCIMENTO[\s\S]{0,80}?(\d{2}\/\d{2}\/\d{4})/i)?.[1] || null;
   const total=normalized.match(/TOTAL\s+VENCIMENTO\s+R\$\s*([\d.]+,\d{2})/i)?.[1] || normalized.match(/VALOR DA FATURA[\s\S]{0,100}?R\$\s*([\d.]+,\d{2})/i)?.[1] || null;
   const totalWeight=normalized.match(/([\d.]+,\d{3})\s*KG/i)?.[1] || null;
@@ -118,7 +126,7 @@ export async function POST(req:NextRequest){
         if(!parsed.invoiceNo&&!parsed.items.length)continue;
         const invoiceRows=await db("danubio_invoices?on_conflict=connection_id,graph_attachment_id",{
           method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=representation"},
-          body:JSON.stringify({connection_id:connection.id,email_message_id:mail.id,graph_attachment_id:a.id,file_name:a.name||"fatura.pdf",invoice_number:parsed.invoiceNo,issued_at:parsed.issued,due_at:parsed.due,document_count:parsed.docCount,total_weight:parsed.totalWeight,total_services:parsed.totalServices,total_icms:parsed.totalIcms,total_invoice:parsed.total,processing_status:"needs_review",extraction_data:{parserVersion:4,pages:parsed.pages,textLength:parsed.textLength}})
+          body:JSON.stringify({connection_id:connection.id,email_message_id:mail.id,graph_attachment_id:a.id,file_name:a.name||"fatura.pdf",invoice_number:parsed.invoiceNo,issued_at:parsed.issued,due_at:parsed.due,document_count:parsed.docCount,total_weight:parsed.totalWeight,total_services:parsed.totalServices,total_icms:parsed.totalIcms,total_invoice:parsed.total,processing_status:"needs_review",extraction_data:{parserVersion:5,pages:parsed.pages,textLength:parsed.textLength}})
         });
         const invoiceId=invoiceRows[0].id;
         const itemDates=parsed.items.map((x:any)=>x.issued_at).filter(Boolean).sort();
@@ -166,7 +174,7 @@ export async function POST(req:NextRequest){
         const statuses=payload.reduce((o:any,x:any)=>(o[x.comparison_status]=(o[x.comparison_status]||0)+1,o),{});
         const totalsCheck={sumItems:Math.round(payload.reduce((s:number,x:any)=>s+(x.charged_total||0),0)*100)/100,weightItems:Math.round(payload.reduce((s:number,x:any)=>s+(x.weight_kg||0),0)*1000)/1000,countItems:payload.length};
         const processed=parsed.items.length>0&&parsed.items.every((x:any)=>x.cte_number&&x.weight_kg!=null&&x.charged_total!=null);
-        await db("danubio_invoices?id=eq."+invoiceId,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({processing_status:processed?"processed":"needs_review",extraction_data:{parserVersion:4,pages:parsed.pages,textLength:parsed.textLength,statuses,totalsCheck,parsedRows:payload.length,periodStart,periodEnd,periodSource:itemDates.length?"invoice_item_issue_dates":"not_identified"}})});
+        await db("danubio_invoices?id=eq."+invoiceId,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({processing_status:processed?"processed":"needs_review",extraction_data:{parserVersion:5,pages:parsed.pages,textLength:parsed.textLength,statuses,totalsCheck,parsedRows:payload.length,periodStart,periodEnd,periodSource:itemDates.length?"invoice_item_issue_dates":"not_identified"}})});
         invoices.push({id:invoiceId,invoiceNumber:parsed.invoiceNo,fileName:a.name,documentCount:parsed.docCount,parsedRows:payload.length,total:parsed.total,totalWeight:parsed.totalWeight,statuses,totalsCheck,processingStatus:processed?"processed":"needs_review"});
       }
     }
