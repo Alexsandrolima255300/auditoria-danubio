@@ -103,7 +103,7 @@ export async function POST(req:NextRequest){
         if(!parsed.invoiceNo&&!parsed.items.length)continue;
         const invoiceRows=await db("danubio_invoices?on_conflict=connection_id,graph_attachment_id",{
           method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=representation"},
-          body:JSON.stringify({connection_id:connection.id,email_message_id:mail.id,graph_attachment_id:a.id,file_name:a.name||"fatura.pdf",invoice_number:parsed.invoiceNo,issued_at:parsed.issued,due_at:parsed.due,document_count:parsed.docCount,total_weight:parsed.totalWeight,total_services:parsed.totalServices,total_icms:parsed.totalIcms,total_invoice:parsed.total,processing_status:"needs_review",extraction_data:{parserVersion:4,pages:parsed.pages,textLength:parsed.textLength,periodStart,periodEnd,periodSource:itemDates.length?"invoice_item_issue_dates":"not_identified"}})
+          body:JSON.stringify({connection_id:connection.id,email_message_id:mail.id,graph_attachment_id:a.id,file_name:a.name||"fatura.pdf",invoice_number:parsed.invoiceNo,issued_at:parsed.issued,due_at:parsed.due,document_count:parsed.docCount,total_weight:parsed.totalWeight,total_services:parsed.totalServices,total_icms:parsed.totalIcms,total_invoice:parsed.total,processing_status:"needs_review",extraction_data:{parserVersion:4,pages:parsed.pages,textLength:parsed.textLength}})
         });
         const invoiceId=invoiceRows[0].id;
         const itemDates=parsed.items.map((x:any)=>x.issued_at).filter(Boolean).sort();
@@ -151,7 +151,7 @@ export async function POST(req:NextRequest){
         const statuses=payload.reduce((o:any,x:any)=>(o[x.comparison_status]=(o[x.comparison_status]||0)+1,o),{});
         const totalsCheck={sumItems:Math.round(payload.reduce((s:number,x:any)=>s+(x.charged_total||0),0)*100)/100,weightItems:Math.round(payload.reduce((s:number,x:any)=>s+(x.weight_kg||0),0)*1000)/1000,countItems:payload.length};
         const processed=parsed.items.length>0&&parsed.items.every((x:any)=>x.cte_number&&x.weight_kg!=null&&x.charged_total!=null);
-        await db("danubio_invoices?id=eq."+invoiceId,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({processing_status:processed?"processed":"needs_review",extraction_data:{parserVersion:4,pages:parsed.pages,textLength:parsed.textLength,statuses,totalsCheck,parsedRows:payload.length}})});
+        await db("danubio_invoices?id=eq."+invoiceId,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({processing_status:processed?"processed":"needs_review",extraction_data:{parserVersion:4,pages:parsed.pages,textLength:parsed.textLength,statuses,totalsCheck,parsedRows:payload.length,periodStart,periodEnd,periodSource:itemDates.length?"invoice_item_issue_dates":"not_identified"}})});
         invoices.push({id:invoiceId,invoiceNumber:parsed.invoiceNo,fileName:a.name,documentCount:parsed.docCount,parsedRows:payload.length,total:parsed.total,totalWeight:parsed.totalWeight,statuses,totalsCheck,processingStatus:processed?"processed":"needs_review"});
       }
     }
