@@ -113,6 +113,10 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
     finally { setInvoiceLoading(false); }
   }
 
+  useEffect(() => {
+    if (activeSection === 'invoices') void loadInvoices();
+  }, [activeSection]);
+
   async function loadDailyConfirmation() {
     try {
       const response = await fetch('/api/outlook/daily-confirmation', { cache: 'no-store' });
