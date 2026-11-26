@@ -514,7 +514,8 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
 
       {activeSection === 'search' && (() => {
         const normalizedCte = searchCte.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-        const results = documents.filter((doc: any) => {
+        const hasSearchCriteria = Boolean(searchDate || searchCte.trim());
+        const results = hasSearchCriteria ? documents.filter((doc: any) => {
           const receivedAt = doc.email?.received_at;
           const day = receivedAt ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(receivedAt)) : '';
           const rawText = String(doc.audit?.extracted_fields?.extractedTextSample || '');
@@ -523,7 +524,7 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
           const matchesDate = !searchDate || day === searchDate;
           const matchesCte = !normalizedCte || normalizedDocCte.includes(normalizedCte) || String(doc.file_name || '').toLowerCase().includes(searchCte.trim().toLowerCase());
           return matchesDate && matchesCte;
-        });
+        }) : [];
         return <section className="data-section">
           <div className="section-toolbar"><div><h2>Localizar CT-e</h2><p>Pesquise nos documentos salvos nos últimos 45 dias.</p></div><button className="refresh-button" onClick={() => void loadAuditData()} disabled={dataLoading}>{dataLoading ? 'Atualizando...' : 'Atualizar dados'}</button></div>
           <div className="audit-search-fields">
@@ -531,9 +532,9 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
             <label>Pesquisar por número do CT-e<input value={searchCte} onChange={e => setSearchCte(e.target.value)} placeholder="Digite o número do CT-e" /></label>
             <button className="search-clear" onClick={() => { setSearchDate(''); setSearchCte(''); }}>Limpar pesquisa</button>
           </div>
-          <div className="search-results-heading"><b>{results.length} documento(s) encontrado(s)</b><span>Você pode preencher a data, o CT-e ou os dois campos.</span></div>
+          <div className="search-results-heading"><b>{hasSearchCriteria ? results.length + ' documento(s) encontrado(s)' : 'Aguardando pesquisa'}</b><span>Os CT-es só aparecem depois que você informar uma data ou número para pesquisar.</span></div>
           {dataError && <div className="mail-error">{dataError}</div>}
-          {dataLoading && !savedData ? <div className="empty-state">Carregando documentos...</div> : results.length ? <div className="record-list">{results.map(renderDocument)}</div> : <div className="empty-state"><span>⌕</span><b>Nenhum documento encontrado</b><p>Altere a data ou confira o número do CT-e. A pesquisa considera os registros ainda dentro do prazo de retenção.</p></div>}
+          {dataLoading && !savedData ? <div className="empty-state">Carregando documentos...</div> : !hasSearchCriteria ? <div className="empty-state"><span>⌕</span><b>Pesquise um CT-e</b><p>Digite o número do CT-e ou selecione o dia de recebimento. Nenhum documento será listado antes da pesquisa.</p></div> : results.length ? <div className="record-list">{results.map(renderDocument)}</div> : <div className="empty-state"><span>⌕</span><b>Nenhum documento encontrado</b><p>Altere a data ou confira o número do CT-e. A pesquisa considera os registros ainda dentro do prazo de retenção.</p></div>}
         </section>;
       })()}
 
