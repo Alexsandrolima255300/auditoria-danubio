@@ -56,9 +56,10 @@ export async function GET(request: NextRequest) {
       review: reviewMap.get(attachment.id) || null,
     }));
 
-    const divergences = documents.filter((doc: any) =>
-      ["divergent", "needs_review"].includes(doc.audit?.audit_status) || doc.processing_status === "error"
-    );
+    const divergences = documents.filter((doc: any) => {
+      const needsAttention = ["divergent", "needs_review"].includes(doc.audit?.audit_status) || doc.processing_status === "error";
+      return needsAttention && doc.review?.review_status !== "completed";
+    });
 
     return NextResponse.json({
       mailbox: connection.mailbox_email,
