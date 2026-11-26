@@ -112,7 +112,12 @@ export async function POST(req:NextRequest){
       checkpoint.invoiceScanPeriodEnd=cursorPeriodEnd||null;
       await db("outlook_connections?id=eq."+connection.id,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({audit_checkpoint:checkpoint})});
     }
-    if(cursorAt<cutoff){cursorAt=cutoff;cursorId="";}
+    if(cursorAt<cutoff){
+      cursorAt=cutoff;cursorId="";
+      checkpoint.invoiceScanCursorAt=cursorAt;
+      checkpoint.invoiceScanCursorId=cursorId;
+      await db("outlook_connections?id=eq."+connection.id,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({audit_checkpoint:checkpoint})});
+    }
     const allRecentMails=await db("email_messages?select=id,graph_message_id,subject,received_at,has_attachments&has_attachments=eq.true&connection_id=eq."+connection.id+"&received_at=gte."+encodeURIComponent(cursorAt)+"&order=received_at.asc&limit=1000");
     const pendingMails=allRecentMails.filter((mail:any)=>mail.received_at>cursorAt||(mail.received_at===cursorAt&&mail.id>cursorId));
     const batchSize = Math.min(10, Math.max(1, Number(req.nextUrl.searchParams.get("batch") || 5)));
@@ -206,6 +211,8 @@ export async function POST(req:NextRequest){
       const lastMail=batchMails[batchMails.length-1];
       checkpoint.invoiceScanCursorAt=lastMail.received_at;
       checkpoint.invoiceScanCursorId=lastMail.id;
+      const latestCompleted=await db("danubio_invoices?select=period_end&connection_id=eq."+connection.id+"&processing_status=eq.processed&period_end=not.is.null&order=period_end.desc,created_at.desc&limit=1");
+      if(latestCompleted.length)cursorPeriodEnd=latestCompleted[0].period_end;
       checkpoint.invoiceScanPeriodEnd=cursorPeriodEnd||null;
       await db("outlook_connections?id=eq."+connection.id,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({audit_checkpoint:checkpoint})});
     }
