@@ -53,15 +53,15 @@ export async function extractCte(buffer: Buffer): Promise<ExtractedCte> {
   // Só o campo explícito "TOMADOR DO SERVIÇO:" identifica o tomador real.
   // O CNPJ deve ser extraído do mesmo bloco, nunca de qualquer ocorrência no documento
   // (o CNPJ da Brasil pode aparecer como remetente sem ser o tomador).
-  const tomadorMatch = text.match(/TOMADOR\\s+DO\\s+SERVI[ÇC]O\\s*:\\s*([\\s\\S]{0,1200})/i);
+  const tomadorMatch = text.match(/TOMADOR\s+DO\s+SERVI[ÇC]O\s*:\s*([\s\S]{0,1200})/i);
   const tomadorBlock = tomadorMatch?.[1] || "";
   const name = first(tomadorBlock, [
-    /^(.+?)(?=\\s+ENDEREÇO\\s*:|\\s+CNPJ(?:\\/CPF)?\\s*:|\\s+IE\\s*:)/i,
+    /^(.+?)(?=\s+ENDEREÇO\s*:|\s+CNPJ(?:\/CPF)?\s*:|\s+IE\s*:)/i,
   ]);
   const contextualCnpj = first(tomadorBlock, [
-    /CNPJ(?:\\/CPF)?\\s*[:\\n-]*\\s*([\\d./-]{14,18})/i,
+    /CNPJ(?:\/CPF)?\s*[:\n-]*\s*([\d./-]{14,18})/i,
   ]);
-  const cnpjDigits = contextualCnpj ? contextualCnpj.replace(/\\D/g, "") : "";
+  const cnpjDigits = contextualCnpj ? contextualCnpj.replace(/\D/g, "") : "";
   const cnpj = cnpjDigits.length === 14 ? cnpjDigits : null;
   const invoiceValue = parseMoney(text, [
     "VALOR TOTAL DAS MERCADORIAS", "VALOR TOTAL DA MERCADORIA",
