@@ -49,30 +49,20 @@ export async function extractCte(buffer: Buffer): Promise<ExtractedCte> {
     pages.push(content.items.map((item: any) => "str" in item ? item.str : "").join(" "));
   }
   const text = pages.join("\n").replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ");
-  const name = first(text, [
-    /TOMADOR(?: DO SERVICO| DO SERVIÇO)?\s*[:\n-]+\s*([^\n]{4,100})/i,
-    /NOME\s*\/\s*RAZAO SOCIAL[^\n]*\n\s*([^\n]{4,100})/i,
+  // O DACTE pode trazer primeiro o rótulo-resumo "TOMADOR DO SERVIÇO DESTINATÁRIO".
+  // Só o campo explícito "TOMADOR DO SERVIÇO:" identifica o tomador real.
+  // O CNPJ deve ser extraído do mesmo bloco, nunca de qualquer ocorrência no documento
+  // (o CNPJ da Brasil pode aparecer como remetente sem ser o tomador).
+  const tomadorMatch = text.match(/TOMADOR\\s+DO\\s+SERVI[ÇC]O\\s*:\\s*([\\s\\S]{0,1200})/i);
+  const tomadorBlock = tomadorMatch?.[1] || "";
+  const name = first(tomadorBlock, [
+    /^(.+?)(?=\\s+ENDEREÇO\\s*:|\\s+CNPJ(?:\\/CPF)?\\s*:|\\s+IE\\s*:)/i,
   ]);
-  // Nunca use o primeiro CNPJ do documento: normalmente ele pertence ao emitente.
-  // Para a empresa auditada, confirme o CNPJ exato no texto integral do DACTE.
-  const targetCnpj = "39860057000104";
-  const digitsOnly = text.replace(/\D/g, "");
-  const isTargetCompany = /BRASIL\s+ENGRENAGENS\s+E\s+CORRENTES/i.test(text);
-  let cnpj: string | null = null;
-  if (isTargetCompany && digitsOnly.includes(targetCnpj)) {
-    cnpj = targetCnpj;
-  } else if (!isTargetCompany) {
-    // Para outros tomadores, só aceite CNPJ próximo ao rótulo TOMADOR.
-    const tomadorIndex = text.search(/TOMADOR(?:\s+DO\s+SERVI[ÇC]O)?/i);
-    if (tomadorIndex >= 0) {
-      const tomadorBlock = text.slice(tomadorIndex, tomadorIndex + 900);
-      const contextualCnpj = first(tomadorBlock, [
-        /CNPJ\s*[:\n-]*\s*([\d./-]{14,18})/i,
-        /\b(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})\b/,
-      ]);
-      cnpj = contextualCnpj ? contextualCnpj.replace(/\D/g, "") : null;
-    }
-  }
+  const contextualCnpj = first(tomadorBlock, [
+    /CNPJ(?:\\/CPF)?\\s*[:\\n-]*\\s*([\\d./-]{14,18})/i,
+  ]);
+  const cnpjDigits = contextualCnpj ? contextualCnpj.replace(/\\D/g, "") : "";
+  const cnpj = cnpjDigits.length === 14 ? cnpjDigits : null;
   const invoiceValue = parseMoney(text, [
     "VALOR TOTAL DAS MERCADORIAS", "VALOR TOTAL DA MERCADORIA",
     "VALOR DA MERCADORIA", "VALOR DA CARGA", "VALOR TOTAL DA CARGA",
@@ -99,7 +89,7 @@ export async function extractCte(buffer: Buffer): Promise<ExtractedCte> {
     tomadorName: name, tomadorCnpj: cnpj, invoiceValue,
     weightKg: Number.isFinite(weightKg as number) ? weightKg : null,
     freightGross, icmsValue, freightNet,
-    fields: { pdfPages: pdf.numPages, extractedTextLength: text.length, extractedTextSample: text.slice(0, 5000), targetCompanyNameFound: isTargetCompany, targetCnpjFound: digitsOnly.includes(targetCnpj) },
+    fields: { pdfPages: pdf.numPages, extractedTextLength: text.length, extractedTextSample: text.slice(0, 5000), tomadorBlock: tomadorBlock.slice(0, 1200), targetCompanyIsTomador: cnpj === "39860057000104" },
     errors,
   };
 }
