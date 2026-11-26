@@ -277,7 +277,11 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   }
 
   const documents = savedData?.documents || [];
-  const completedDocuments = savedData?.completedDocuments || [];
+  // A aba Documentos é um arquivo de ocorrências resolvidas, nunca uma listagem geral de CT-es.
+  const completedDocuments = documents.filter((doc: any) =>
+    ["divergent", "needs_review"].includes(doc.audit?.audit_status) &&
+    doc.review?.review_status === "completed"
+  );
   const divergences = savedData?.divergences || [];
   const totals = savedData?.totals || { documents: 0, divergences: 0, errors: 0, audited: 0 };
   // Registros persistidos no Supabase são associados ao e-mail original pelo ID do Microsoft Graph.
