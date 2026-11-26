@@ -316,6 +316,7 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
         <span>Referência<strong>{brl(audit.reference_minimum)}</strong></span>
         <span>Diferença<strong>{brl(audit.discrepancy_amount)}</strong></span>
       </div>
+      {doc.review?.review_status === 'completed' && <p className="record-reason">Revisão concluída{doc.review.reviewed_by ? ' por ' + doc.review.reviewed_by : ''}{doc.review.reviewed_at ? ' em ' + dateTime(doc.review.reviewed_at) : ''}.{doc.review.assessment ? ' Avaliação: ' + ({ correct_charge: 'Cobrança correta', incorrect_charge: 'Cobrança incorreta', unconfirmed: 'Não confirmado' } as Record<string, string>)[doc.review.assessment] : ''}{doc.review.reason ? ' Observações: ' + doc.review.reason : ''}</p>}
       {(audit.discrepancy_reason || doc.processing_status === 'error') && <p className="record-reason">{audit.discrepancy_reason || 'O PDF apresentou erro durante a leitura.'}</p>}
     </article>;
   }
