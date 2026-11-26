@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { openToken, refreshMicrosoftToken } from "../../../../../lib/microsoft";
+import { openToken, refreshMicrosoftToken } from "../../../../../../lib/microsoft";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
