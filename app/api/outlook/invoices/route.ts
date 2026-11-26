@@ -124,7 +124,7 @@ export async function POST(req:NextRequest){
         if(!normCompany(extracted.text).includes(DANUBIO_COMPANY))continue;
         const parsed=parseInvoice(extracted.text);parsed.pages=extracted.pages;
         // Se o PDF não trouxer o número legível, aproveita o número informado no assunto do e-mail.
-        parsed.invoiceNo=parsed.invoiceNo||mail.subject?.match(/\\bfatura\\s*(?:n[º°.]?\\s*)?(\\d{3,})\\b/i)?.[1]||null;
+        parsed.invoiceNo=parsed.invoiceNo||mail.subject?.match(/\bfatura\s*(?:n[º°.]?\s*)?(\d{3,})\b/i)?.[1]||null;
         if(!parsed.invoiceNo&&!parsed.items.length)continue;
         const invoiceRows=await db("danubio_invoices?on_conflict=connection_id,graph_attachment_id",{
           method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=representation"},
