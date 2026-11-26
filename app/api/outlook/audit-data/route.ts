@@ -56,18 +56,22 @@ export async function GET(request: NextRequest) {
       review: reviewMap.get(attachment.id) || null,
     }));
 
-    const divergences = documents.filter((doc: any) => {
-      const needsAttention = ["divergent", "needs_review"].includes(doc.audit?.audit_status) || doc.processing_status === "error";
-      return needsAttention && doc.review?.review_status !== "completed";
-    });
+    const isDivergence = (doc: any) => ["divergent", "needs_review"].includes(doc.audit?.audit_status);
+    const completedDocuments = documents.filter((doc: any) =>
+      isDivergence(doc) && doc.review?.review_status === "completed"
+    );
+    const divergences = documents.filter((doc: any) =>
+      (isDivergence(doc) || doc.processing_status === "error") && doc.review?.review_status !== "completed"
+    );
 
     return NextResponse.json({
       mailbox: connection.mailbox_email,
       emails: messages,
       documents,
+      completedDocuments,
       divergences,
       totals: {
-        documents: documents.length,
+        documents: completedDocuments.length,
         divergences: divergences.length,
         errors: documents.filter((doc: any) => doc.processing_status === "error").length,
         audited: audits.length,
