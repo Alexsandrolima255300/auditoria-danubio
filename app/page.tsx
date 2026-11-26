@@ -192,6 +192,49 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
     }
   }
 
+  async function runAuditForDate(receivedDate: string) {
+    setAuditLoading(true);
+    setMailError('');
+    setAuditResult(null);
+    setAuditProgress({ processed: 0, percent: 0, running: true });
+    let dateNextLink: string | null = null;
+    const totals = { emailsFound: 0, pdfsRead: 0, auditsCreated: 0, errors: 0, ignored: 0 };
+    const allResults: any[] = [];
+    try {
+      for (let batch = 0; batch < 500; batch++) {
+        const response = await fetch('/api/outlook/audit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ receivedDate, dateNextLink }),
+          cache: 'no-store',
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Falha ao conferir os fretes deste dia.');
+        totals.emailsFound += data.emailsFound || 0;
+        totals.pdfsRead += data.pdfsRead || 0;
+        totals.auditsCreated += data.auditsCreated || 0;
+        totals.errors += data.errors || 0;
+        totals.ignored += data.ignored || 0;
+        allResults.push(...(data.results || []));
+        dateNextLink = data.dateNextLink || null;
+        const percent = data.hasMore ? Math.min(95, Math.max(5, Math.round((batch + 1) / (batch + 2) * 100))) : 100;
+        setAuditProgress({ processed: totals.emailsFound, percent, running: Boolean(data.hasMore) });
+        setAuditResult({ ...totals, results: [...allResults], hasMore: Boolean(data.hasMore), receivedDate });
+        if (!data.hasMore) break;
+        if (batch === 499) throw new Error('A conferência deste dia atingiu o limite de segurança. Execute novamente para continuar.');
+      }
+      setAuditResult({ ...totals, results: allResults, hasMore: false, receivedDate });
+      setAuditProgress({ processed: totals.emailsFound, percent: 100, running: false });
+      await loadAuditData();
+    } catch (error) {
+      setMailError(error instanceof Error ? error.message : 'Erro na conferência deste dia.');
+      setAuditResult({ ...totals, results: allResults, hasMore: Boolean(dateNextLink), receivedDate });
+      setAuditProgress(progress => ({ ...progress, running: false }));
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+
   async function runAudit(reprocessProcessed = false) {
     setAuditLoading(true);
     setMailError('');
@@ -621,8 +664,8 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
             <button onClick={() => void runAudit()} disabled={!connected || auditLoading}>{auditLoading ? 'Auditando e-mails...' : auditResult?.hasMore ? 'Continuar varredura' : 'Auditar e-mails e CT-e'}</button>
             <button className="light" onClick={() => { if (window.confirm('Isso vai baixar e ler novamente os PDFs já processados. Deseja continuar?')) void runAudit(true); }} disabled={!connected || auditLoading}>Reprocessar PDFs já lidos</button>
           </div>
-          {(auditLoading || auditResult) && <div className="mail-list progress-panel"><h4>{auditLoading ? 'Auditoria em andamento' : 'Progresso da auditoria'}</h4><div className="progress-track"><div className="progress-value" style={{ width: auditProgress.percent + '%' }} /></div><small>{auditProgress.percent}% · {auditProgress.processed} e-mail(s) processado(s){auditLoading ? ' · lendo próximos lotes automaticamente...' : ' · processamento pausado/concluído'}</small></div>}
-          {auditResult && <div className="mail-success">Varredura: {auditResult.emailsFound} e-mails, {auditResult.pdfsRead} PDFs lidos, {auditResult.auditsCreated} auditorias salvas, {auditResult.errors} erros. {auditResult.hasMore ? 'Ainda há mensagens pendentes; execute novamente para retomar.' : 'Busca concluída.'}</div>}
+          {(auditLoading || auditResult) && <div className="mail-list progress-panel"><h4>{auditResult?.receivedDate ? 'Conferência de ' + new Date(auditResult.receivedDate + 'T12:00:00-03:00').toLocaleDateString('pt-BR') : auditLoading ? 'Auditoria em andamento' : 'Progresso da auditoria'}</h4><div className="progress-track"><div className="progress-value" style={{ width: auditProgress.percent + '%' }} /></div><small>{auditProgress.percent}% · {auditProgress.processed} e-mail(s) processado(s){auditLoading ? ' · lendo próximos lotes automaticamente...' : ' · processamento pausado/concluído'}</small></div>}
+          {auditResult && <div className="mail-success">{auditResult.receivedDate ? 'Conferência do dia ' + new Date(auditResult.receivedDate + 'T12:00:00-03:00').toLocaleDateString('pt-BR') + ': ' : 'Varredura: '}{auditResult.emailsFound} e-mails, {auditResult.pdfsRead} PDFs lidos, {auditResult.auditsCreated} auditorias salvas, {auditResult.errors} erros. {auditResult.hasMore ? 'Ainda há mensagens pendentes; execute novamente para retomar.' : 'Busca concluída.'}</div>}
           <div className="mail-list">
             <div className="email-folders-heading"><div><h4>E-mails organizados por dia</h4><p>{emails.length} mensagem(ns) carregada(s) · histórico disponível por até 45 dias</p></div><span className="email-folder-count">{Object.keys(emails.reduce((groups: Record<string, Mail[]>, mail) => { const key = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(mail.receivedAt)); (groups[key] ||= []).push(mail); return groups; }, {})).length} dia(s)</span></div>
             {emails.length ? Object.entries(emails.reduce((groups: Record<string, Mail[]>, mail) => { const key = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(mail.receivedAt)); (groups[key] ||= []).push(mail); return groups; }, {})).sort(([a], [b]) => b.localeCompare(a)).map(([day, dayEmails]) => {
@@ -631,6 +674,9 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
               return <section className="email-day-folder" key={day}>
                 <button className="email-folder-toggle" aria-expanded={expanded} onClick={() => setEmailFolderState(current => ({ ...current, [day]: !expanded }))}>
                   <span className="email-folder-icon">{expanded ? '▾' : '▸'}</span><span className="email-folder-title"><b>{dayLabel}</b><small>{dayEmails.length} e-mail(s)</small></span><span className="email-folder-state">{expanded ? 'Recolher' : 'Abrir pasta'}</span>
+                </button>
+                <button className="secondary-action" onClick={() => void runAuditForDate(day)} disabled={!connected || auditLoading}>
+                  {auditLoading && auditResult?.receivedDate === day ? 'Conferindo este dia...' : 'Conferir fretes deste dia'}
                 </button>
                 {expanded && <div className="email-folder-content">{dayEmails.map(mail => <article key={mail.id} className="mail-item"><div><b>{mail.subject}</b><small>{mail.sender} · {dateTime(mail.receivedAt)}</small><p>{mail.preview}</p></div><div className="mail-meta">{mail.hasAttachments && <span className="pill">Com anexo</span>}{mail.webLink && <a href={mail.webLink} target="_blank" rel="noreferrer">Abrir e-mail</a>}</div></article>)}</div>}
               </section>;
