@@ -16,7 +16,7 @@ const statusLabel = (status?: string) => (({ accepted: 'Aceito', divergent: 'Div
 
 type Section = 'overview' | 'documents' | 'divergences' | 'newEmails' | 'emails' | 'search' | 'invoices';
 type Mail = { id: string; subject: string; sender: string; senderEmail: string; receivedAt: string; hasAttachments: boolean; preview: string; webLink: string };
-type AuditData = { mailbox?: string; emails: any[]; documents: any[]; divergences: any[]; totals: { documents: number; divergences: number; errors: number; audited: number } };
+type AuditData = { mailbox?: string; emails: any[]; documents: any[]; completedDocuments?: any[]; divergences: any[]; totals: { documents: number; divergences: number; errors: number; audited: number } };
 const navigation: { id: Section; label: string; icon: string }[] = [
   { id: 'overview', label: 'Visão geral', icon: '▦' },
   { id: 'documents', label: 'Documentos', icon: '▤' },
@@ -277,6 +277,7 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   }
 
   const documents = savedData?.documents || [];
+  const completedDocuments = savedData?.completedDocuments || [];
   const divergences = savedData?.divergences || [];
   const totals = savedData?.totals || { documents: 0, divergences: 0, errors: 0, audited: 0 };
   // Registros persistidos no Supabase são associados ao e-mail original pelo ID do Microsoft Graph.
@@ -290,7 +291,7 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   };
   const sectionInfo: Record<Section, { title: string; subtitle: string }> = {
     overview: { title: 'Auditoria de fretes', subtitle: 'Acompanhe a operação e a situação das cobranças da Danúbio.' },
-    documents: { title: 'Documentos', subtitle: 'Consulte os CT-es e arquivos localizados nas mensagens sincronizadas.' },
+    documents: { title: 'Documentos', subtitle: 'Consulte somente as divergências que já tiveram a revisão concluída.' },
     divergences: { title: 'Divergências', subtitle: 'Revise cobranças divergentes, falhas de leitura e casos pendentes.' },
     newEmails: { title: 'Novos e-mails', subtitle: 'Mensagens recebidas hoje, considerando a virada do dia à meia-noite no horário de Brasília.' },
     emails: { title: 'E-mails', subtitle: 'Gerencie a conexão com Outlook e acompanhe as mensagens sincronizadas.' },
@@ -537,9 +538,9 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
       })()}
 
       {activeSection === 'documents' && <section className="data-section">
-        <div className="section-toolbar"><div><h2>Todos os documentos</h2><p>{totals.documents} arquivo(s) registrado(s) · dados salvos no Supabase</p></div><button className="refresh-button" onClick={() => void loadAuditData()} disabled={dataLoading}>{dataLoading ? 'Atualizando...' : 'Atualizar lista'}</button></div>
+        <div className="section-toolbar"><div><h2>Divergências concluídas</h2><p>{completedDocuments.length} CT-e(s) com divergência e revisão concluída · dados salvos no Supabase</p></div><button className="refresh-button" onClick={() => void loadAuditData()} disabled={dataLoading}>{dataLoading ? 'Atualizando...' : 'Atualizar lista'}</button></div>
         {dataError && <div className="mail-error">{dataError}</div>}
-        {dataLoading && !savedData ? <div className="empty-state">Carregando documentos...</div> : documents.length ? <div className="record-list">{documents.map(renderDocument)}</div> : <div className="empty-state"><span>▤</span><b>Nenhum documento registrado</b><p>Quando a auditoria encontrar anexos, eles aparecerão aqui, mesmo depois de sair e voltar ao painel.</p><button onClick={() => setActiveSection('emails')}>Ir para E-mails</button></div>}
+        {dataLoading && !savedData ? <div className="empty-state">Carregando documentos...</div> : completedDocuments.length ? <div className="record-list">{completedDocuments.map(renderDocument)}</div> : <div className="empty-state"><span>▤</span><b>Nenhuma divergência concluída</b><p>Somente CT-es identificados com divergência e cuja revisão foi concluída aparecerão aqui. Os demais CT-es continuam organizados na aba E-mails por dia.</p><button onClick={() => setActiveSection('divergences')}>Ir para Divergências</button></div>}
       </section>}
 
       {activeSection === 'divergences' && <section className="data-section">
