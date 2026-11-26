@@ -277,6 +277,15 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const documents = savedData?.documents || [];
   const divergences = savedData?.divergences || [];
   const totals = savedData?.totals || { documents: 0, divergences: 0, errors: 0, audited: 0 };
+  // Registros persistidos no Supabase são associados ao e-mail original pelo ID do Microsoft Graph.
+  const getEmailAudit = (mail: Mail) => {
+    const docs = (savedData?.documents || []).filter((doc: any) => doc.email?.graph_message_id === mail.id);
+    const audited = docs.filter((doc: any) => Boolean(doc.audit));
+    const divergences = docs.filter((doc: any) =>
+      ["divergent", "needs_review"].includes(doc.audit?.audit_status) || doc.processing_status === "error"
+    );
+    return { docs, audited, divergences };
+  };
   const sectionInfo: Record<Section, { title: string; subtitle: string }> = {
     overview: { title: 'Auditoria de fretes', subtitle: 'Acompanhe a operação e a situação das cobranças da Danúbio.' },
     documents: { title: 'Documentos', subtitle: 'Consulte os CT-es e arquivos localizados nas mensagens sincronizadas.' },
@@ -671,14 +680,25 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
             {emails.length ? Object.entries(emails.reduce((groups: Record<string, Mail[]>, mail) => { const key = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(mail.receivedAt)); (groups[key] ||= []).push(mail); return groups; }, {})).sort(([a], [b]) => b.localeCompare(a)).map(([day, dayEmails]) => {
               const expanded = emailFolderState[day] ?? day === brazilDate;
               const dayLabel = new Date(day + 'T12:00:00-03:00').toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+              const dayAudit = dayEmails.map(mail => getEmailAudit(mail));
+              const dayDocs = dayAudit.reduce((sum, item) => sum + item.docs.length, 0);
+              const dayAudited = dayAudit.reduce((sum, item) => sum + item.audited.length, 0);
+              const dayDivergences = dayAudit.reduce((sum, item) => sum + item.divergences.length, 0);
+              const dayComplete = dayDocs > 0 && dayAudit.every((item, index) => !dayEmails[index].hasAttachments || item.audited.length > 0);
               return <section className="email-day-folder" key={day}>
                 <button className="email-folder-toggle" aria-expanded={expanded} onClick={() => setEmailFolderState(current => ({ ...current, [day]: !expanded }))}>
-                  <span className="email-folder-icon">{expanded ? '▾' : '▸'}</span><span className="email-folder-title"><b>{dayLabel}</b><small>{dayEmails.length} e-mail(s)</small></span><span className="email-folder-state">{expanded ? 'Recolher' : 'Abrir pasta'}</span>
+                  <span className="email-folder-icon">{expanded ? '▾' : '▸'}</span><span className="email-folder-title"><b>{dayLabel}</b><small>{dayEmails.length} e-mail(s) · {dayAudited}/{dayDocs} documento(s) auditado(s) · {dayDivergences} divergência(s)</small></span><span className="email-folder-state">{dayComplete ? 'Conferido' : dayAudited ? 'Parcial' : 'Pendente'} · {expanded ? 'Recolher' : 'Abrir pasta'}</span>
                 </button>
                 <button className="secondary-action" onClick={() => void runAuditForDate(day)} disabled={!connected || auditLoading}>
-                  {auditLoading && auditResult?.receivedDate === day ? 'Conferindo este dia...' : 'Conferir fretes deste dia'}
+                  {auditLoading && auditResult?.receivedDate === day ? 'Conferindo este dia...' : dayComplete ? 'Conferir novamente este dia' : 'Conferir fretes deste dia'}
                 </button>
-                {expanded && <div className="email-folder-content">{dayEmails.map(mail => <article key={mail.id} className="mail-item"><div><b>{mail.subject}</b><small>{mail.sender} · {dateTime(mail.receivedAt)}</small><p>{mail.preview}</p></div><div className="mail-meta">{mail.hasAttachments && <span className="pill">Com anexo</span>}{mail.webLink && <a href={mail.webLink} target="_blank" rel="noreferrer">Abrir e-mail</a>}</div></article>)}</div>}
+                {expanded && <div className="email-folder-content">{dayEmails.map(mail => {
+                  const auditInfo = getEmailAudit(mail);
+                  const hasAudits = auditInfo.audited.length > 0;
+                  const hasDivergences = auditInfo.divergences.length > 0;
+                  const stateLabel = !mail.hasAttachments ? 'Sem anexo' : hasDivergences ? 'Com divergência' : hasAudits ? 'Conferido · sem divergência' : 'Ainda não conferido';
+                  return <article key={mail.id} className="mail-item"><div><b>{mail.subject}</b><small>{mail.sender} · {dateTime(mail.receivedAt)}</small><p>{mail.preview}</p>{auditInfo.docs.length > 0 && <small>{auditInfo.docs.map((doc:any) => doc.file_name + ': ' + statusLabel(doc.audit?.audit_status || doc.processing_status)).join(' · ')}</small>}</div><div className="mail-meta">{mail.hasAttachments && <span className="pill">Com anexo</span>}<span className={'record-status ' + (hasDivergences ? 'divergent' : hasAudits ? 'accepted' : 'pending')}>{stateLabel}</span>{mail.webLink && <a href={mail.webLink} target="_blank" rel="noreferrer">Abrir e-mail</a>}</div></article>;
+                })}</div>}
               </section>;
             }) : <p className="subtle-message">Nenhuma mensagem sincronizada até o momento.</p>}
           </div>
