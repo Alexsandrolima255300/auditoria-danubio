@@ -87,14 +87,36 @@ export async function POST(req:NextRequest){
   const cookie=req.cookies.get("outlook_refresh")?.value;
   if(!cookie)return NextResponse.json({error:"Outlook ainda não conectado."},{status:401});
   try{
-    const connections=await db("outlook_connections?select=id,encrypted_token_cache&revoked_at=is.null&order=last_refreshed_at.desc&limit=1");
+    const connections=await db("outlook_connections?select=id,encrypted_token_cache,audit_checkpoint&revoked_at=is.null&order=last_refreshed_at.desc&limit=1");
     if(!connections.length)throw new Error("Conexão Outlook não encontrada.");
     const connection=connections[0];const refresh=openToken(cookie);const tokens=await refreshMicrosoftToken(refresh);
     const cutoff=new Date(Date.now()-45*86400000).toISOString();
-    const mails=await db("email_messages?select=id,graph_message_id,subject,received_at,has_attachments&has_attachments=eq.true&connection_id=eq."+connection.id+"&received_at=gte."+encodeURIComponent(cutoff)+"&order=received_at.desc&limit=1000");
-    const offset = Math.max(0, Number(req.nextUrl.searchParams.get("offset") || 0));
+    // Cursor incremental: começa no e-mail da última fatura processada e avança após cada lote concluído.
+    const checkpoint={...(connection.audit_checkpoint||{})};
+    let cursorAt=String(checkpoint.invoiceScanCursorAt||"");
+    let cursorId=String(checkpoint.invoiceScanCursorId||"");
+    let cursorPeriodEnd=String(checkpoint.invoiceScanPeriodEnd||"");
+    if(!cursorAt){
+      const latest=await db("danubio_invoices?select=id,period_end,email_message_id&connection_id=eq."+connection.id+"&processing_status=eq.processed&period_end=not.is.null&order=period_end.desc,created_at.desc&limit=1");
+      if(latest.length&&latest[0].email_message_id){
+        const sourceMail=await db("email_messages?select=id,received_at&id=eq."+encodeURIComponent(latest[0].email_message_id)+"&connection_id=eq."+connection.id+"&limit=1");
+        if(sourceMail.length&&sourceMail[0].received_at){
+          cursorAt=sourceMail[0].received_at;
+          cursorId=sourceMail[0].id;
+          cursorPeriodEnd=latest[0].period_end;
+        }
+      }
+      if(!cursorAt)cursorAt=cutoff;
+      checkpoint.invoiceScanCursorAt=cursorAt;
+      checkpoint.invoiceScanCursorId=cursorId;
+      checkpoint.invoiceScanPeriodEnd=cursorPeriodEnd||null;
+      await db("outlook_connections?id=eq."+connection.id,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({audit_checkpoint:checkpoint})});
+    }
+    if(cursorAt<cutoff){cursorAt=cutoff;cursorId="";}
+    const allRecentMails=await db("email_messages?select=id,graph_message_id,subject,received_at,has_attachments&has_attachments=eq.true&connection_id=eq."+connection.id+"&received_at=gte."+encodeURIComponent(cursorAt)+"&order=received_at.asc&limit=1000");
+    const pendingMails=allRecentMails.filter((mail:any)=>mail.received_at>cursorAt||(mail.received_at===cursorAt&&mail.id>cursorId));
     const batchSize = Math.min(10, Math.max(1, Number(req.nextUrl.searchParams.get("batch") || 5)));
-    const batchMails = mails.slice(offset, offset + batchSize);
+    const batchMails = pendingMails.slice(0,batchSize);
     const invoices:any[]=[];
     let completedInvoicesSkipped=0;
     for(const mail of batchMails){
@@ -176,11 +198,19 @@ export async function POST(req:NextRequest){
         const statuses=payload.reduce((o:any,x:any)=>(o[x.comparison_status]=(o[x.comparison_status]||0)+1,o),{});
         const totalsCheck={sumItems:Math.round(payload.reduce((s:number,x:any)=>s+(x.charged_total||0),0)*100)/100,weightItems:Math.round(payload.reduce((s:number,x:any)=>s+(x.weight_kg||0),0)*1000)/1000,countItems:payload.length};
         const processed=parsed.items.length>0&&parsed.items.every((x:any)=>x.cte_number&&x.weight_kg!=null&&x.charged_total!=null);
-        await db("danubio_invoices?id=eq."+invoiceId,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({processing_status:processed?"processed":"needs_review",extraction_data:{parserVersion:5,pages:parsed.pages,textLength:parsed.textLength,statuses,totalsCheck,parsedRows:payload.length,periodStart,periodEnd,periodSource:itemDates.length?"invoice_item_issue_dates":"not_identified"}})});
+        await db("danubio_invoices?id=eq."+invoiceId,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({processing_status:processed?"processed":"needs_review",extraction_data:{parserVersion:6,pages:parsed.pages,textLength:parsed.textLength,statuses,totalsCheck,parsedRows:payload.length,periodStart,periodEnd,periodSource:itemDates.length?"invoice_item_issue_dates":"not_identified"}})});
         invoices.push({id:invoiceId,invoiceNumber:parsed.invoiceNo,fileName:a.name,documentCount:parsed.docCount,parsedRows:payload.length,total:parsed.total,totalWeight:parsed.totalWeight,statuses,totalsCheck,processingStatus:processed?"processed":"needs_review"});
       }
     }
+    if(batchMails.length){
+      const lastMail=batchMails[batchMails.length-1];
+      checkpoint.invoiceScanCursorAt=lastMail.received_at;
+      checkpoint.invoiceScanCursorId=lastMail.id;
+      checkpoint.invoiceScanPeriodEnd=cursorPeriodEnd||null;
+      await db("outlook_connections?id=eq."+connection.id,{method:"PATCH",headers:{Prefer:"return=minimal"},body:JSON.stringify({audit_checkpoint:checkpoint})});
+    }
     const saved=await db("danubio_invoices?select=*,items:danubio_invoice_items(*)&connection_id=eq."+connection.id+"&created_at=gte."+encodeURIComponent(cutoff)+"&order=created_at.desc&limit=200");
-    return NextResponse.json({ok:true,found:invoices.length,invoices:saved,processedNow:invoices,scannedEmails:batchMails.length,totalEmails:mails.length,completedInvoicesSkipped,nextOffset:offset+batchMails.length,hasMore:offset+batchMails.length<mails.length});
+    const remainingEmails=Math.max(0,pendingMails.length-batchMails.length);
+    return NextResponse.json({ok:true,found:invoices.length,invoices:saved,processedNow:invoices,scannedEmails:batchMails.length,totalEmails:batchMails.length+remainingEmails,remainingEmails,completedInvoicesSkipped,hasMore:remainingEmails>0,scanCursorAt:checkpoint.invoiceScanCursorAt,scanCursorPeriodEnd:checkpoint.invoiceScanPeriodEnd||null});
   }catch(e){return NextResponse.json({error:e instanceof Error?e.message:"Falha ao conferir faturas."},{status:500});}
 }
