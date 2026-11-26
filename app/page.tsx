@@ -94,20 +94,18 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
     setInvoiceLoading(true); setInvoiceError('');
     setInvoiceProgress({ processed: 0, total: 0, percent: 0 });
     try {
-      let offset = 0;
+      let processed = 0;
       let total = 0;
       let keepGoing = true;
       while (keepGoing) {
-        const response = await fetch(`/api/outlook/invoices?offset=${offset}&batch=5`, { method: 'POST', cache: 'no-store' });
+        const response = await fetch('/api/outlook/invoices?batch=5', { method: 'POST', cache: 'no-store' });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Não foi possível processar as faturas.');
-        total = Number(data.totalEmails || 0);
-        offset = Number(data.nextOffset || offset);
-        const processed = Math.min(offset, total);
+        processed += Number(data.scannedEmails || 0);
+        total = processed + Number(data.remainingEmails || 0);
         setInvoiceProgress({ processed, total, percent: total ? Math.round(processed / total * 100) : 100 });
         setInvoiceData(data.invoices || []);
         keepGoing = Boolean(data.hasMore);
-        if (!total) break;
       }
     } catch (error) { setInvoiceError(error instanceof Error ? error.message : 'Falha ao processar faturas.'); }
     finally { setInvoiceLoading(false); }
