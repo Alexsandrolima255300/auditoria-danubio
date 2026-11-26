@@ -105,7 +105,7 @@ export async function POST(req:NextRequest){
         connection.id+"&email_message_id=eq."+encodeURIComponent(mail.id)+"&limit=50"
       );
       const emailAlreadyComplete=completedForEmail.length>0&&completedForEmail.every((invoice:any)=>
-        invoice.processing_status==="processed"&&Number(invoice.extraction_data?.parserVersion||0)>=5
+        invoice.processing_status==="processed"&&Number(invoice.extraction_data?.parserVersion||0)>=6
       );
       if(emailAlreadyComplete){
         completedInvoicesSkipped++;
@@ -116,17 +116,19 @@ export async function POST(req:NextRequest){
       for(const a of atts.value||[]){
         if(a.isInline||!((a.contentType||"").toLowerCase().includes("pdf")||(a.name||"").toLowerCase().endsWith(".pdf")))continue;
         const exists=await db("danubio_invoices?select=id,processing_status&connection_id=eq."+connection.id+"&graph_attachment_id=eq."+encodeURIComponent(a.id)+"&limit=1");
-        if(exists.length&&exists[0].processing_status==="processed"){const prior=await db("danubio_invoices?select=extraction_data&id=eq."+exists[0].id+"&limit=1");if(Number(prior[0]?.extraction_data?.parserVersion||0)>=5){invoices.push({id:exists[0].id,alreadyProcessed:true});continue;}}
+        if(exists.length&&exists[0].processing_status==="processed"){const prior=await db("danubio_invoices?select=extraction_data&id=eq."+exists[0].id+"&limit=1");if(Number(prior[0]?.extraction_data?.parserVersion||0)>=6){invoices.push({id:exists[0].id,alreadyProcessed:true});continue;}}
         const file=await graph(tokens.access_token,"/me/messages/"+encodeURIComponent(mail.graph_message_id)+"/attachments/"+encodeURIComponent(a.id));
         if(!file.contentBytes)continue;
         const buffer=Buffer.from(file.contentBytes,"base64");if(buffer.length>20*1024*1024)continue;
         const extracted=await pdfText(buffer);
         if(!normCompany(extracted.text).includes(DANUBIO_COMPANY))continue;
         const parsed=parseInvoice(extracted.text);parsed.pages=extracted.pages;
+        // Se o PDF não trouxer o número legível, aproveita o número informado no assunto do e-mail.
+        parsed.invoiceNo=parsed.invoiceNo||mail.subject?.match(/\\bfatura\\s*(?:n[º°.]?\\s*)?(\\d{3,})\\b/i)?.[1]||null;
         if(!parsed.invoiceNo&&!parsed.items.length)continue;
         const invoiceRows=await db("danubio_invoices?on_conflict=connection_id,graph_attachment_id",{
           method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=representation"},
-          body:JSON.stringify({connection_id:connection.id,email_message_id:mail.id,graph_attachment_id:a.id,file_name:a.name||"fatura.pdf",invoice_number:parsed.invoiceNo,issued_at:parsed.issued,due_at:parsed.due,document_count:parsed.docCount,total_weight:parsed.totalWeight,total_services:parsed.totalServices,total_icms:parsed.totalIcms,total_invoice:parsed.total,processing_status:"needs_review",extraction_data:{parserVersion:5,pages:parsed.pages,textLength:parsed.textLength}})
+          body:JSON.stringify({connection_id:connection.id,email_message_id:mail.id,graph_attachment_id:a.id,file_name:a.name||"fatura.pdf",invoice_number:parsed.invoiceNo,issued_at:parsed.issued,due_at:parsed.due,document_count:parsed.docCount,total_weight:parsed.totalWeight,total_services:parsed.totalServices,total_icms:parsed.totalIcms,total_invoice:parsed.total,processing_status:"needs_review",extraction_data:{parserVersion:6,pages:parsed.pages,textLength:parsed.textLength}})
         });
         const invoiceId=invoiceRows[0].id;
         const itemDates=parsed.items.map((x:any)=>x.issued_at).filter(Boolean).sort();
