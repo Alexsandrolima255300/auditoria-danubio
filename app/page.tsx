@@ -430,8 +430,8 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
               <div className="record-grid"><span>CT-es na fatura<strong>{invoice.document_count??items.length}</strong></span><span>Peso total<strong>{invoice.total_weight!=null?Number(invoice.total_weight).toLocaleString('pt-BR')+' kg':'Não identificado'}</strong></span><span>Total da fatura<strong>{brl(invoice.total_invoice)}</strong></span><span>Confere<strong>{counts.matched||0}</strong></span><span>Divergências<strong>{(counts.weight_difference||0)+(counts.value_difference||0)+(counts.both_different||0)}</strong></span><span>Não localizados<strong>{counts.not_found||0}</strong></span></div>
               <div className="invoice-expand-label">{expanded?'Ocultar documentos ▲':'Ver conferência dos CT-es ▼'}</div>
             </button>
-            <div className="no-print" style={{padding:'0 14px 12px',display:'flex',justifyContent:'flex-end'}}>
-              <a className="invoice-report-print" href={`/api/outlook/invoices/${encodeURIComponent(invoice.id)}/original`} target="_blank" rel="noreferrer" style={{display:'inline-flex',alignItems:'center',gap:7,textDecoration:'none'}}>
+            <div style={{padding:'0 14px 14px',display:'flex',justifyContent:'stretch'}}>
+              <a href={`/api/outlook/invoices/${encodeURIComponent(invoice.id)}/original`} target="_blank" rel="noreferrer" aria-label={`Abrir PDF original da fatura ${invoice.invoice_number||''}`} style={{boxSizing:'border-box',display:'flex',width:'100%',minHeight:42,alignItems:'center',justifyContent:'center',gap:9,padding:'11px 16px',borderRadius:9,background:'#1d4ed8',color:'#ffffff',fontSize:13,fontWeight:700,textDecoration:'none',border:'1px solid #1d4ed8',cursor:'pointer'}}>
                 📄 Abrir fatura original recebida por e-mail
               </a>
             </div>
