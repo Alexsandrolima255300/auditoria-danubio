@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
     let legacySiimp: any = { hasMore: false, nextLink: null };
 
     let dateNextLink: string | null = null;
-    if (typeof payload.receivedDate === "string" && /^\\d{4}-\\d{2}-\\d{2}$/.test(payload.receivedDate)) {
+    if (typeof payload.receivedDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(payload.receivedDate)) {
       const dayStart = new Date(payload.receivedDate + "T00:00:00-03:00").toISOString();
       const nextDayStart = new Date(new Date(dayStart).getTime() + 24 * 60 * 60 * 1000).toISOString();
       const batch = await listDateMessages(tokens.access_token, typeof payload.dateNextLink === "string" ? payload.dateNextLink : null, dayStart, nextDayStart);
