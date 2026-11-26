@@ -60,6 +60,8 @@ export default function Home() {
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [invoiceProgress, setInvoiceProgress] = useState({ processed: 0, total: 0, percent: 0 });
   const [invoiceError, setInvoiceError] = useState('');
+  const [invoiceRecoveryId, setInvoiceRecoveryId] = useState<string | null>(null);
+  const [invoiceRecoveryStatus, setInvoiceRecoveryStatus] = useState('');
     const [invoiceFoldersOpen, setInvoiceFoldersOpen] = useState<Record<string, boolean>>({});
 const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [selectedInvoiceDiscrepancy, setSelectedInvoiceDiscrepancy] = useState<any>(null);
@@ -109,6 +111,60 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
       }
     } catch (error) { setInvoiceError(error instanceof Error ? error.message : 'Falha ao processar faturas.'); }
     finally { setInvoiceLoading(false); }
+  }
+
+  async function recoverInvoiceCtes(invoice: any) {
+    setInvoiceRecoveryId(invoice.id);
+    setInvoiceRecoveryStatus('Iniciando busca histórica no Outlook...');
+    setInvoiceError('');
+    try {
+      let daysDone = 0;
+      let emailsFound = 0;
+      let pdfsRead = 0;
+      let auditsCreated = 0;
+      let errors = 0;
+      const start = new Date('2026-10-16T12:00:00Z');
+      const end = new Date('2026-11-16T12:00:00Z');
+      for (let day = new Date(start); day <= end; day.setUTCDate(day.getUTCDate() + 1)) {
+        const receivedDate = day.toISOString().slice(0, 10);
+        let dateNextLink: string | null = null;
+        let page = 0;
+        do {
+          const response = await fetch('/api/outlook/audit', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ receivedDate, dateNextLink }),
+            cache: 'no-store',
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Falha ao buscar e-mails históricos.');
+          emailsFound += Number(data.emailsFound || 0);
+          pdfsRead += Number(data.pdfsRead || 0);
+          auditsCreated += Number(data.auditsCreated || 0);
+          errors += Number(data.errors || 0);
+          dateNextLink = data.dateNextLink || null;
+          page++;
+          if (page > 100) throw new Error('A busca histórica retornou páginas demais para um único dia.');
+        } while (dateNextLink);
+        daysDone++;
+        setInvoiceRecoveryStatus(`Buscando e-mails: ${daysDone}/32 dias · ${pdfsRead} PDFs lidos · ${auditsCreated} auditorias registradas...`);
+      }
+
+      setInvoiceRecoveryStatus('Documentos recuperados. Refazendo a comparação dos 162 CT-es...');
+      const reconcileResponse = await fetch(`/api/outlook/invoices/${encodeURIComponent(invoice.id)}/reconcile`, {
+        method: 'POST', cache: 'no-store',
+      });
+      const reconcile = await reconcileResponse.json();
+      if (!reconcileResponse.ok) throw new Error(reconcile.error || 'Falha ao refazer a comparação da fatura.');
+      const refreshed = await fetch('/api/outlook/invoices', { cache: 'no-store' });
+      const refreshedData = await refreshed.json();
+      if (refreshed.ok) setInvoiceData(refreshedData.invoices || []);
+      setInvoiceRecoveryStatus(`Busca concluída: ${pdfsRead} PDFs lidos, ${auditsCreated} auditorias criadas, ${reconcile.recoveredOriginals} CT-es originais vinculados e ${reconcile.statuses?.not_found || 0} ainda não localizados. ${errors ? errors + ' erro(s) de leitura.' : ''}`);
+    } catch (error) {
+      setInvoiceError(error instanceof Error ? error.message : 'Falha na recuperação histórica.');
+      setInvoiceRecoveryStatus('');
+    } finally {
+      setInvoiceRecoveryId(null);
+    }
   }
 
   useEffect(() => {
@@ -430,10 +486,14 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
               <div className="record-grid"><span>CT-es na fatura<strong>{invoice.document_count??items.length}</strong></span><span>Peso total<strong>{invoice.total_weight!=null?Number(invoice.total_weight).toLocaleString('pt-BR')+' kg':'Não identificado'}</strong></span><span>Total da fatura<strong>{brl(invoice.total_invoice)}</strong></span><span>Confere<strong>{counts.matched||0}</strong></span><span>Divergências<strong>{(counts.weight_difference||0)+(counts.value_difference||0)+(counts.both_different||0)}</strong></span><span>Não localizados<strong>{counts.not_found||0}</strong></span></div>
               <div className="invoice-expand-label">{expanded?'Ocultar documentos ▲':'Ver conferência dos CT-es ▼'}</div>
             </button>
-            <div style={{padding:'0 14px 14px',display:'flex',justifyContent:'stretch'}}>
+            <div style={{padding:'0 14px 14px',display:'grid',gap:8}}>
               <a href={`/api/outlook/invoices/${encodeURIComponent(invoice.id)}/original`} target="_blank" rel="noreferrer" aria-label={`Abrir PDF original da fatura ${invoice.invoice_number||''}`} style={{boxSizing:'border-box',display:'flex',width:'100%',minHeight:42,alignItems:'center',justifyContent:'center',gap:9,padding:'11px 16px',borderRadius:9,background:'#1d4ed8',color:'#ffffff',fontSize:13,fontWeight:700,textDecoration:'none',border:'1px solid #1d4ed8',cursor:'pointer'}}>
                 📄 Abrir fatura original recebida por e-mail
               </a>
+              {invoice.invoice_number === '57197' && <button type="button" onClick={()=>void recoverInvoiceCtes(invoice)} disabled={invoiceRecoveryId!==null} style={{width:'100%',minHeight:42,borderRadius:9,border:'1px solid #b7791f',background:'#fff7e6',color:'#8a4b08',fontSize:13,fontWeight:700,cursor:invoiceRecoveryId?'wait':'pointer',opacity:invoiceRecoveryId?0.7:1}}>
+                {invoiceRecoveryId===invoice.id ? '⏳ Recuperando CT-es históricos...' : '↻ Recuperar 146 CT-es não localizados'}
+              </button>}
+              {invoiceRecoveryId===invoice.id && <small style={{color:'#a16207'}}>{invoiceRecoveryStatus}</small>}
             </div>
             {expanded && <div className="invoice-items-wrap">
               <section className="invoice-report">
