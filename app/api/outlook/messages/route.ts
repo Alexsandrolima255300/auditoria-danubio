@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       db("email_messages?" + select + "&connection_id=eq." + encodeURIComponent(connection.id) +
         "&received_at=gte." + encodeURIComponent(dayStart.toISOString()) +
         "&received_at=lt." + encodeURIComponent(nextDayStart.toISOString()) +
-        "&order=received_at.desc&limit=200"),
+        "&order=received_at.desc&limit=1000"),
     ]);
     const mapMail = (mail: any) => ({
       id: mail.graph_message_id,
