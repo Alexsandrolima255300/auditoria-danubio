@@ -61,6 +61,7 @@ export default function Home() {
   const [invoiceProgress, setInvoiceProgress] = useState({ processed: 0, total: 0, percent: 0 });
   const [invoiceError, setInvoiceError] = useState('');
   const [invoiceRecoveryId, setInvoiceRecoveryId] = useState<string | null>(null);
+  const [invoiceRecoveryStatusId, setInvoiceRecoveryStatusId] = useState<string | null>(null);
   const [invoiceRecoveryStatus, setInvoiceRecoveryStatus] = useState('');
     const [invoiceFoldersOpen, setInvoiceFoldersOpen] = useState<Record<string, boolean>>({});
 const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
@@ -115,6 +116,7 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
 
   async function recoverInvoiceCtes(invoice: any) {
     setInvoiceRecoveryId(invoice.id);
+    setInvoiceRecoveryStatusId(invoice.id);
     setInvoiceRecoveryStatus('Iniciando busca histórica no Outlook...');
     setInvoiceError('');
     try {
@@ -493,7 +495,7 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
               {invoice.invoice_number === '57197' && <button type="button" onClick={()=>void recoverInvoiceCtes(invoice)} disabled={invoiceRecoveryId!==null} style={{width:'100%',minHeight:42,borderRadius:9,border:'1px solid #b7791f',background:'#fff7e6',color:'#8a4b08',fontSize:13,fontWeight:700,cursor:invoiceRecoveryId?'wait':'pointer',opacity:invoiceRecoveryId?0.7:1}}>
                 {invoiceRecoveryId===invoice.id ? '⏳ Recuperando CT-es históricos...' : '↻ Recuperar 146 CT-es não localizados'}
               </button>}
-              {invoiceRecoveryId===invoice.id && <small style={{color:'#a16207'}}>{invoiceRecoveryStatus}</small>}
+              {invoiceRecoveryStatusId===invoice.id && <small style={{color:'#a16207'}}>{invoiceRecoveryStatus}</small>}
             </div>
             {expanded && <div className="invoice-items-wrap">
               <section className="invoice-report">
