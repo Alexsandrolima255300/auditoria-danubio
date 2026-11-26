@@ -62,6 +62,21 @@ async function listIncremental(accessToken: string, startingUrl: string | null, 
   );
   return { items: candidates, nextLink: data["@odata.nextLink"] || null };
 }
+async function listDateMessages(accessToken: string, startingUrl: string | null, dayStart: string, nextDayStart: string) {
+  const first = new URL("https://graph.microsoft.com/v1.0/me/messages");
+  first.searchParams.set("$filter", "receivedDateTime ge " + dayStart + " and receivedDateTime lt " + nextDayStart);
+  first.searchParams.set("$top", "25");
+  first.searchParams.set("$select", "id,subject,from,receivedDateTime,hasAttachments,internetMessageId,conversationId,bodyPreview");
+  const url = startingUrl || first.toString();
+  const response = await fetch(url, { headers: { Authorization: "Bearer " + accessToken }, cache: "no-store" });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error?.message || "Falha ao buscar e-mails da data escolhida.");
+  const candidates = (data.value || []).filter((m: any) =>
+    /danubio|danúbio/i.test((m.subject || "") + " " + (m.bodyPreview || "")) ||
+    /siimp/i.test((m.from?.emailAddress?.name || "") + " " + (m.from?.emailAddress?.address || "") + " " + (m.subject || "") + " " + (m.bodyPreview || ""))
+  );
+  return { items: candidates, nextLink: data["@odata.nextLink"] || null };
+}
 function isPdf(a: any) {
   return (a.contentType || "").toLowerCase().includes("pdf") || (a.name || "").toLowerCase().endsWith(".pdf");
 }
@@ -131,7 +146,15 @@ export async function POST(request: NextRequest) {
     let legacyDanubio: any = { hasMore: false, nextLink: null };
     let legacySiimp: any = { hasMore: false, nextLink: null };
 
-    if (payload.reprocessProcessed === true) {
+    let dateNextLink: string | null = null;
+    if (typeof payload.receivedDate === "string" && /^\\d{4}-\\d{2}-\\d{2}$/.test(payload.receivedDate)) {
+      const dayStart = new Date(payload.receivedDate + "T00:00:00-03:00").toISOString();
+      const nextDayStart = new Date(new Date(dayStart).getTime() + 24 * 60 * 60 * 1000).toISOString();
+      const batch = await listDateMessages(tokens.access_token, typeof payload.dateNextLink === "string" ? payload.dateNextLink : null, dayStart, nextDayStart);
+      messages = batch.items;
+      dateNextLink = batch.nextLink;
+      hasMore = Boolean(dateNextLink);
+    } else if (payload.reprocessProcessed === true) {
       const [danubio, siimp] = await Promise.all([
         payload.doneDanubio === true ? Promise.resolve({ items: [], hasMore: false, nextLink: null }) : searchAll(tokens.access_token, "Danubio", 2, payload.cursorDanubio),
         payload.doneSiimp === true ? Promise.resolve({ items: [], hasMore: false, nextLink: null }) : searchAll(tokens.access_token, "Siimp Sistemas", 2, payload.cursorSiimp),
@@ -246,7 +269,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (payload.reprocessProcessed !== true) {
+    if (payload.reprocessProcessed !== true && !payload.receivedDate) {
       const nextCheckpoint = hasMore
         ? { mode: "incremental", lastSyncAt: checkpoint.lastSyncAt || null, syncStartedAt, nextLink }
         : { mode: "incremental", lastSyncAt: syncStartedAt, syncStartedAt: null, nextLink: null };
@@ -260,7 +283,7 @@ export async function POST(request: NextRequest) {
       emailsSaved, attachmentsSaved, pdfsRead, auditsCreated, ignored, errors,
       alreadyProcessedSkipped,
       hasMore,
-      nextDanubio: legacyDanubio.nextLink, nextSiimp: legacySiimp.nextLink,
+      nextDanubio: legacyDanubio.nextLink, nextSiimp: legacySiimp.nextLink, dateNextLink,
       doneDanubio: !legacyDanubio.hasMore, doneSiimp: !legacySiimp.hasMore, results,
       syncMode: payload.reprocessProcessed === true ? "manual-reprocess" : "incremental",
       note: "A sincronização incremental consulta apenas mensagens recebidas desde o último checkpoint. Mensagens e anexos são processados em modo somente leitura.",
