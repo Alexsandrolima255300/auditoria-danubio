@@ -49,6 +49,7 @@ export default function Home() {
   const [confirmationLoading, setConfirmationLoading] = useState(false);
   const [savedData, setSavedData] = useState<AuditData | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [dataError, setDataError] = useState('');
   const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
   const [reviewDraft, setReviewDraft] = useState({ reviewStatus: 'pending', assessment: '', reason: '', reviewedBy: '' });
@@ -139,6 +140,7 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
       if ((error instanceof Error ? error.message : '').toLowerCase().includes('não conectado')) setConnected(false);
     } finally {
       setMailLoading(false);
+      setInitialLoading(false);
     }
   }
 
@@ -322,6 +324,7 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   }
 
   return <main className="page">
+    {initialLoading && <div className="initial-loading" role="status" aria-live="polite"><div className="loading-brand"><span>AF</span><div>ALEX FREIGHT <b>AUDIT</b></div></div><div className="loading-spinner" /><h2>Preparando sua auditoria</h2><p>Estamos carregando seus e-mails, documentos e informações.</p><div className="loading-dots"><i /><i /><i /></div></div>}
     <aside className="sidebar">
       <div className="logo">AF</div>
       <div className="brand">ALEX FREIGHT <b>AUDIT</b></div>
