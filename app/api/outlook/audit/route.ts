@@ -293,6 +293,24 @@ export async function POST(request: NextRequest) {
     });
     return response;
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Falha na auditoria dos e-mails." }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Falha na auditoria dos e-mails.";
+    const grantRevoked = /AADSTS50173|invalid_grant|grant has expired|revoked/i.test(message);
+    if (grantRevoked) {
+      // O refresh token foi invalidado pelo Microsoft Entra ID. Marcar a conexão
+      // como revogada faz a interface solicitar nova autorização e impede o cron
+      // de repetir indefinidamente o mesmo token inválido.
+      try {
+        await db("outlook_connections?revoked_at=is.null", {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ revoked_at: new Date().toISOString() }),
+        });
+      } catch {}
+      return NextResponse.json({
+        error: "A autorização do Microsoft Outlook foi revogada ou expirou. Clique em “Reconectar Microsoft Outlook” para autorizar novamente. Os e-mails e as auditorias já salvos foram preservados.",
+        reconnectRequired: true,
+      }, { status: 401 });
+    }
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
