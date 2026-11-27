@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       response_mode: "query",
       scope: "openid profile offline_access User.Read Mail.Read",
       state,
-      prompt: "select_account",
+      prompt: "consent",
     }).toString();
     const response = NextResponse.redirect(url);
     response.cookies.set("outlook_oauth_state", state, {
