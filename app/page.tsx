@@ -289,7 +289,9 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
       setAuditProgress({ processed: totals.emailsFound, percent: 100, running: false });
       await loadAuditData();
     } catch (error) {
-      setMailError(error instanceof Error ? error.message : 'Erro na conferência deste dia.');
+      const message = error instanceof Error ? error.message : 'Erro na conferência deste dia.';
+      setMailError(message);
+      if (/reconectar microsoft outlook|aadsts50173|invalid_grant/i.test(message)) setConnected(false);
       setAuditResult({ ...totals, results: allResults, hasMore: Boolean(dateNextLink), receivedDate });
       setAuditProgress(progress => ({ ...progress, running: false }));
     } finally {
@@ -328,7 +330,9 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
       setAuditProgress({ processed: totals.emailsFound, percent: 100, running: false });
       await Promise.all([loadAuditData(), loadDailyConfirmation()]);
     } catch (error) {
-      setMailError(error instanceof Error ? error.message : 'Erro na auditoria.');
+      const message = error instanceof Error ? error.message : 'Erro na auditoria.';
+      setMailError(message);
+      if (/reconectar microsoft outlook|aadsts50173|invalid_grant/i.test(message)) setConnected(false);
       setAuditResult({ ...totals, results: allResults, hasMore: true });
       setAuditProgress(progress => ({ ...progress, running: false }));
     } finally {
