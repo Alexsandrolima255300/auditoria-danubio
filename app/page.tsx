@@ -751,7 +751,7 @@ const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
             <small className="daily-foot">A confirmação registra o responsável e o horário. Novos e-mails exigem nova conferência.</small>
           </div>
           <div className="mail-actions">
-            {!connected && <button onClick={() => { window.location.href = '/api/outlook/connect'; }}>Reconectar Microsoft Outlook</button>}
+            <button onClick={() => { window.location.href = '/api/outlook/connect'; }}>Reconectar Microsoft Outlook</button>
             <button className="light" onClick={() => void syncEmails()} disabled={mailLoading}>{mailLoading ? 'Consultando mensagens...' : connected ? 'Atualizar e-mails' : 'Testar conexão'}</button>
             <button onClick={() => void runAudit()} disabled={!connected || auditLoading}>{auditLoading ? 'Auditando e-mails...' : auditResult?.hasMore ? 'Continuar varredura' : 'Auditar e-mails e CT-e'}</button>
             <button className="light" onClick={() => { if (window.confirm('Isso vai baixar e ler novamente os PDFs já processados. Deseja continuar?')) void runAudit(true); }} disabled={!connected || auditLoading}>Reprocessar PDFs já lidos</button>
