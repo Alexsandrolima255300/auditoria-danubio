@@ -1,6 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { microsoftConfig, sealToken } from "../../../../../lib/microsoft";
 
+export const runtime = "nodejs";
+
+const PROJECT_URL = process.env.SUPABASE_URL || "https://shzyfxkjsssjpmesvhxu.supabase.co";
+
+async function saveConnection(mailbox: string, refreshToken: string, expiresIn: number) {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) throw new Error("Falta configurar SUPABASE_SERVICE_ROLE_KEY na Vercel.");
+  const headers = { apikey: key, Authorization: "Bearer " + key, "Content-Type": "application/json" };
+  const existingResponse = await fetch(
+    PROJECT_URL + "/rest/v1/outlook_connections?select=id&mailbox_email=eq." + encodeURIComponent(mailbox) + "&limit=1",
+    { headers, cache: "no-store" }
+  );
+  const existingText = await existingResponse.text();
+  if (!existingResponse.ok) throw new Error("Não foi possível atualizar a conexão no banco: " + existingText.slice(0, 250));
+  const existing = existingText ? JSON.parse(existingText) : [];
+  const payload = {
+    provider: "microsoft_graph",
+    mailbox_email: mailbox,
+    tenant_id: process.env.MICROSOFT_TENANT_ID,
+    encrypted_token_cache: sealToken(refreshToken),
+    token_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
+    granted_scopes: ["openid", "profile", "offline_access", "User.Read", "Mail.Read"],
+    last_refreshed_at: new Date().toISOString(),
+    revoked_at: null,
+  };
+  const url = PROJECT_URL + "/rest/v1/outlook_connections" + (existing?.[0]?.id ? "?id=eq." + encodeURIComponent(existing[0].id) : "");
+  const saved = await fetch(url, {
+    method: existing?.[0]?.id ? "PATCH" : "POST",
+    headers: { ...headers, Prefer: "return=minimal" },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  if (!saved.ok) throw new Error("Não foi possível salvar a nova autorização do Outlook: " + (await saved.text()).slice(0, 250));
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
@@ -26,9 +61,22 @@ export async function GET(request: NextRequest) {
       method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body, cache: "no-store",
     });
     const tokens = await tokenResponse.json();
-    if (!tokenResponse.ok || !tokens.refresh_token) {
-      throw new Error(tokens.error_description || "A Microsoft não retornou autorização para acesso contínuo ao Outlook.");
+    if (!tokenResponse.ok || !tokens.refresh_token || !tokens.access_token) {
+      throw new Error(tokens.error_description || "A Microsoft não retornou uma nova autorização para o Outlook.");
     }
+
+    const profileResponse = await fetch("https://graph.microsoft.com/v1.0/me?$select=displayName,mail,userPrincipalName", {
+      headers: { Authorization: "Bearer " + tokens.access_token }, cache: "no-store",
+    });
+    const profile = await profileResponse.json();
+    if (!profileResponse.ok) throw new Error(profile.error?.message || "Não foi possível validar a caixa corporativa.");
+    const mailbox = profile.mail || profile.userPrincipalName;
+    if (!mailbox) throw new Error("Não foi possível identificar a caixa de e-mail conectada.");
+
+    // Persistir a nova credencial no Supabase aqui é essencial: o cron não possui
+    // os cookies do navegador e precisa usar o refresh token atualizado do banco.
+    await saveConnection(mailbox, tokens.refresh_token, Number(tokens.expires_in || 3600));
+
     const response = NextResponse.redirect(new URL("/?outlook_connected=1", origin));
     response.cookies.set("outlook_refresh", sealToken(tokens.refresh_token), {
       httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 60 * 60 * 24 * 30, path: "/",
